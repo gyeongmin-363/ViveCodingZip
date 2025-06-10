@@ -18,11 +18,6 @@
             background-color: #1a1a1a; /* 어두운 배경 */
             color: #f0f0f0; /* 밝은 텍스트 */
             cursor: none; /* 기본 커서 숨기기 */
-            -webkit-user-select: none; /* iOS Safari에서 텍스트 선택 방지 */
-            -moz-user-select: none;    /* Firefox에서 텍스트 선택 방지 */
-            -ms-user-select: none;     /* Internet Explorer/Edge에서 텍스트 선택 방지 */
-            user-select: none;         /* 표준 속성: 텍스트 선택 방지 */
-            touch-action: manipulation; /* 더블 탭 확대/축소 방지 */
         }
 
         /* 캔버스 스타일 */
@@ -58,7 +53,7 @@
             visibility: visible;
         }
 
-        /* 컨트롤 설명 (데스크톱 전용, 모바일에서는 숨김) */
+        /* 컨트롤 설명 */
         #controls {
             position: absolute;
             bottom: 20px;
@@ -218,119 +213,6 @@
             z-index: 1003; /* Above crosshair */
             box-sizing: border-box; /* Padding/border included in width/height */
         }
-
-        /* 모바일 컨트롤 스타일 */
-        #mobileControls {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 100%; /* 전체 화면을 덮어 터치 이벤트 처리 */
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            z-index: 1000; /* UI 요소보다 위에 */
-            pointer-events: none; /* 기본적으로 비활성화, 자식 버튼만 활성화 */
-            visibility: hidden; /* 초기에는 숨김 */
-        }
-
-        #mobileControls.active {
-            visibility: visible;
-            pointer-events: auto; /* 활성화되면 이벤트 처리 */
-        }
-
-        .joystick-area {
-            width: 40%; /* 화면의 40%를 조이스틱 영역으로 */
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: flex-end;
-            padding-bottom: 20px; /* 조이스틱을 하단에 배치 */
-            box-sizing: border-box;
-            pointer-events: none; /* 조이스틱 자체는 포인터 이벤트를 받지 않고 내부 컨트롤러가 받음 */
-        }
-
-        #leftJoystick {
-            position: absolute; /* 절대 위치로 변경 */
-            left: 5%; /* 왼쪽에서 5% */
-            bottom: 5%; /* 아래에서 5% */
-            width: 150px;
-            height: 150px;
-            background-color: rgba(0, 150, 255, 0.2); /* 투명도를 낮춤 */
-            border: 2px solid rgba(0, 150, 255, 0.7); /* 테두리 */
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            opacity: 0.9;
-            touch-action: none; /* 터치 액션 방지 */
-            pointer-events: auto; /* 조이스틱 이벤트 활성화 */
-            box-shadow: 0 0 15px rgba(0, 150, 255, 0.5); /* 그림자 */
-        }
-        #leftJoystick div { /* Knob */
-            width: 70px;
-            height: 70px;
-            background-color: rgba(0, 150, 255, 0.7); /* 노브 색상 */
-            border-radius: 50%;
-            position: absolute;
-        }
-
-        .mobile-button-group {
-            display: flex;
-            flex-direction: column;
-            gap: 15px; /* 버튼 간 간격 */
-            position: absolute; /* 그룹 전체를 절대 위치로 */
-            right: 5%; /* 오른쪽에서 5% */
-            bottom: 5%; /* 아래에서 5% */
-            align-items: flex-end; /* 오른쪽 정렬 */
-            pointer-events: auto; /* 버튼 그룹 이벤트 활성화 */
-        }
-
-        .mobile-button {
-            width: 80px; /* 버튼 크기 키움 */
-            height: 80px; /* 버튼 크기 키움 */
-            border-radius: 50%;
-            background-color: rgba(50, 50, 50, 0.6); /* 어두운 배경 */
-            color: white;
-            font-size: 1.1em;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
-            cursor: pointer;
-            transition: background-color 0.2s, box-shadow 0.2s;
-            pointer-events: auto; /* 버튼 이벤트 활성화 */
-            user-select: none; /* 텍스트 선택 방지 */
-            -webkit-tap-highlight-color: transparent; /* 탭 하이라이트 제거 */
-            font-weight: bold;
-        }
-
-        .mobile-button:active {
-            background-color: rgba(80, 80, 80, 0.8);
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
-        }
-
-        /* 이미지에 맞춰 버튼 색상 변경 */
-        .mobile-button.move-button { background-color: #2D6B8C; border-color: #5D9EC1; box-shadow: 0 0 10px rgba(45, 107, 140, 0.4); }
-        .mobile-button.move-button:active { background-color: #225C7C; box-shadow: 0 0 15px rgba(45, 107, 140, 0.8); }
-
-        .mobile-button.action-button { background-color: #2D6B8C; border-color: #5D9EC1; box-shadow: 0 0 10px rgba(45, 107, 140, 0.4); }
-        .mobile-button.action-button:active { background-color: #225C7C; box-shadow: 0 0 15px rgba(45, 107, 140, 0.8); }
-
-        /* 데스크톱에서는 모바일 컨트롤 숨기기 */
-        @media (min-width: 769px) {
-            #mobileControls {
-                display: none;
-            }
-        }
-
-        /* 모바일에서는 데스크톱 컨트롤 숨기기 */
-        @media (max-width: 768px) {
-            #controls {
-                display: none;
-            }
-        }
     </style>
 </head>
 <body>
@@ -349,21 +231,6 @@
     <!-- 총알 개수, 재장전 진행도 추가 (총 모델링은 Three.js로 직접 생성) -->
     <div id="ammoDisplay"></div>
     <div id="reloadProgress"></div>
-
-    <!-- 모바일 가상 터치패드 -->
-    <div id="mobileControls">
-        <!-- 왼쪽 이동 조이스틱 -->
-        <div id="leftJoystick"><div></div></div>
-
-        <!-- 오른쪽 버튼 그룹 -->
-        <div class="mobile-button-group">
-            <div id="jumpButton" class="mobile-button action-button">점프</div>
-            <div id="scopeButton" class="mobile-button action-button">스코프</div>
-            <div id="fireButton" class="mobile-button action-button">발사</div>
-            <div id="runButton" class="mobile-button action-button">달리기</div>
-            <div id="reloadButton" class="mobile-button action-button">재장전</div>
-        </div>
-    </div>
 
     <script type="module">
         // Global variables
@@ -446,17 +313,6 @@
         const WALL = 4;        // 000100
         const ENEMY_BODY = 16; // 010000 (Enemy entire body)
 
-        // Mobile control variables
-        let isMobile = false;
-        let leftJoystick = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0, element: null, knob: null };
-        let touchLookActive = false; // Flag for general look/drag
-        let lastTouchX = 0;
-        let lastTouchY = 0;
-        let touchMoveVector = new THREE.Vector3(); // For left joystick movement
-        const joystickDeadZone = 10; // Pixels
-        const joystickMaxDistance = 50; // Pixels from center
-        let mobileControlsElement;
-
 
         // Function to display messages
         function showMessage(message, duration = 3000) {
@@ -496,17 +352,6 @@
         // Game initialization function
         function init() {
             try {
-                // Check if on mobile device
-                isMobile = /Mobi|Android/i.test(navigator.userAgent);
-                mobileControlsElement = document.getElementById('mobileControls');
-                if (isMobile) {
-                    mobileControlsElement.classList.add('active'); // Show mobile controls
-                    document.getElementById('controls').style.display = 'none'; // Hide desktop controls
-                } else {
-                    mobileControlsElement.style.display = 'none'; // Hide mobile controls
-                    document.getElementById('controls').style.display = 'block'; // Show desktop controls
-                }
-
                 // Create scene
                 scene = new THREE.Scene();
                 scene.background = new THREE.Color(0x222222); // Dark background color
@@ -748,7 +593,7 @@
                 // Set up event listeners
                 setupEventListeners();
 
-                showMessage("던전에 오신 것을 환영합니다! S로 앞으로, W로 뒤로 이동, AD로 좌우 이동, 스페이스바로 점프, 마우스로 시점 변경, 좌클릭으로 총 발사, 우클릭 유지 시 스코프 모드 | R로 재장전", 8000);
+
 
             } catch (error) {
                 console.error("Initialization error:", error);
@@ -1153,16 +998,6 @@
             }, reloadTime);
         }
 
-        // Helper function to check if a touch event is within a specific element
-        function isTouchInsideElement(touch, element) {
-            if (!element) return false;
-            const rect = element.getBoundingClientRect();
-            return touch.clientX >= rect.left &&
-                   touch.clientX <= rect.right &&
-                   touch.clientY >= rect.top &&
-                   touch.clientY <= rect.bottom;
-        }
-
         // Setup event listeners
         function setupEventListeners() {
             // Update renderer and camera on window resize
@@ -1172,272 +1007,100 @@
                 renderer.setSize(window.innerWidth, window.innerHeight);
             });
 
-            // Keyboard input processing (for desktop)
-            if (!isMobile) {
-                document.addEventListener('keydown', (event) => {
-                    keyboard[event.code] = true;
-                    // Spacebar jump (using canJump condition)
-                    if (event.code === 'Space' && canJump) {
-                        playerBody.velocity.y = 5; // Jump strength
-                        canJump = false; // Disable jump after jumping
-                    }
-                    // Start sprint
-                    if (event.code === 'ShiftLeft') {
-                        isSprinting = true;
-                    }
-                    // 'R' key for reload
-                    if (event.code === 'KeyR' && !isReloading && currentAmmo < maxAmmo) {
-                        startReload();
-                    }
-                });
-                document.addEventListener('keyup', (event) => {
-                    keyboard[event.code] = false;
-                    // Stop sprint
-                    if (event.code === 'ShiftLeft') {
-                        isSprinting = false;
-                    }
-                });
-
-                // Mouse movement for view change
-                let isMouseLocked = false;
-                document.addEventListener('click', async (event) => { // Added async keyword
-                    // Activate pointer lock on game screen click
-                    if (document.pointerLockElement !== renderer.domElement) {
-                        renderer.domElement.requestPointerLock();
-                        // Start Tone.js audio context (requires user gesture)
-                        if (Tone.context.state !== 'running') {
-                            await Tone.start();
-                            console.log("AudioContext started by user interaction.");
-                        }
-                    } else if (event.button === 0) { // Left click (fire gun)
-                        shootBullet();
-                    }
-                });
-
-                // Prevent right-click context menu
-                document.addEventListener('contextmenu', (event) => {
-                    event.preventDefault(); // Prevent default context menu
-                });
-
-                // Mouse button press (detect right click)
-                document.addEventListener('mousedown', (event) => {
-                    if (event.button === 2) { // Right mouse click
-                        isScoping = true;
-                        toggleScopeUI(true);
-                    }
-                });
-
-                // Mouse button release (release right click)
-                document.addEventListener('mouseup', (event) => {
-                    if (event.button === 2) { // Right mouse click
-                        isScoping = false;
-                        toggleScopeUI(false);
-                    }
-                });
-
-
-                document.addEventListener('pointerlockchange', () => {
-                    isMouseLocked = document.pointerLockElement === renderer.domElement;
-                    // If pointer lock is released, exit scope mode
-                    if (!isMouseLocked && isScoping) {
-                        isScoping = false;
-                        toggleScopeUI(false);
-                    }
-                });
-
-                document.addEventListener('mousemove', (event) => {
-                    if (isMouseLocked) {
-                        const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
-                        const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
-
-                        const yawSpeed = 0.002;
-                        const pitchSpeed = 0.002;
-
-                        // Mouse X movement rotates playerGroup around Y-axis (player body rotation)
-                        if (playerGroup) {
-                            playerGroup.rotation.y -= movementX * yawSpeed;
-                        }
-
-                        // Mouse Y movement rotates camera around X-axis (up/down view)
-                        if (camera) {
-                            camera.rotation.x -= movementY * pitchSpeed;
-
-                            // Limit camera pitch (-90 to +90 degrees)
-                            camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
-                        }
-                    }
-                });
-            } else {
-                // Mobile Controls Event Listeners
-                leftJoystick.element = document.getElementById('leftJoystick');
-                leftJoystick.knob = leftJoystick.element.querySelector('div');
-
-                const jumpButton = document.getElementById('jumpButton');
-                const runButton = document.getElementById('runButton');
-                const scopeButton = document.getElementById('scopeButton');
-                const fireButton = document.getElementById('fireButton');
-                const reloadButton = document.getElementById('reloadButton');
-
-                // Get all mobile control buttons
-                const allMobileButtons = [jumpButton, runButton, scopeButton, fireButton, reloadButton];
-
-                // Helper to get touch coordinates relative to the screen
-                function getTouchClientPos(touch) {
-                    return {
-                        x: touch.clientX,
-                        y: touch.clientY
-                    };
+            // Keyboard input processing
+            document.addEventListener('keydown', (event) => {
+                keyboard[event.code] = true;
+                // Spacebar jump (using canJump condition)
+                if (event.code === 'Space' && canJump) {
+                    playerBody.velocity.y = 5; // Jump strength
+                    canJump = false; // Disable jump after jumping
                 }
-
-                // Left Joystick (Movement)
-                leftJoystick.element.addEventListener('touchstart', (e) => {
-                    e.preventDefault(); // Prevent scrolling/zoom
-                    leftJoystick.active = true;
-                    const rect = leftJoystick.element.getBoundingClientRect();
-                    const touch = e.changedTouches[0];
-                    leftJoystick.startX = touch.clientX - rect.left;
-                    leftJoystick.startY = touch.clientY - rect.top;
-                    leftJoystick.knob.style.transform = `translate(-50%, -50%) translate(${leftJoystick.startX - rect.width / 2}px, ${leftJoystick.startY - rect.height / 2}px)`;
-                });
-
-                leftJoystick.element.addEventListener('touchmove', (e) => {
-                    e.preventDefault();
-                    if (leftJoystick.active) {
-                        const rect = leftJoystick.element.getBoundingClientRect();
-                        const touch = e.changedTouches[0];
-                        leftJoystick.currentX = touch.clientX - rect.left;
-                        leftJoystick.currentY = touch.clientY - rect.top;
-
-                        let deltaX = leftJoystick.currentX - leftJoystick.startX;
-                        let deltaY = leftJoystick.currentY - leftJoystick.startY;
-
-                        // Clamp knob movement within joystick bounds
-                        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                        if (distance > joystickMaxDistance) {
-                            deltaX = (deltaX / distance) * joystickMaxDistance;
-                            deltaY = (deltaY / distance) * joystickMaxDistance;
-                        }
-
-                        leftJoystick.knob.style.transform = `translate(-50%, -50%) translate(${leftJoystick.startX - rect.width / 2 + deltaX}px, ${leftJoystick.startY - rect.height / 2 + deltaY}px)`;
-                        
-                        // Update movement vector for game logic
-                        if (distance > joystickDeadZone) {
-                            touchMoveVector.set(deltaX, 0, -deltaY).normalize(); // X for strafe, Z for forward/backward
-                        } else {
-                            touchMoveVector.set(0, 0, 0);
-                        }
-                    }
-                });
-
-                leftJoystick.element.addEventListener('touchend', () => {
-                    leftJoystick.active = false;
-                    leftJoystick.knob.style.transform = `translate(-50%, -50%) translate(0, 0)`; // Reset knob to center
-                    touchMoveVector.set(0, 0, 0); // Stop movement
-                });
-
-                // Global touch events for look/drag (outside of buttons/joystick)
-                document.addEventListener('touchstart', async (e) => {
-                    // Check if the touch is NOT inside any button or the left joystick
-                    let isTouchOnUI = false;
-                    if (isTouchInsideElement(e.changedTouches[0], leftJoystick.element)) {
-                        isTouchOnUI = true;
-                    } else {
-                        for (const button of allMobileButtons) {
-                            if (isTouchInsideElement(e.changedTouches[0], button)) {
-                                isTouchOnUI = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!isTouchOnUI) {
-                        e.preventDefault(); // Prevent default if it's a look touch
-                        touchLookActive = true;
-                        lastTouchX = e.changedTouches[0].clientX;
-                        lastTouchY = e.changedTouches[0].clientY;
-
-                        // Start Tone.js audio context (requires user gesture)
-                        if (Tone.context.state !== 'running') {
-                            await Tone.start();
-                            console.log("AudioContext started by user interaction.");
-                        }
-                    }
-                }, { passive: false }); // Use passive: false to allow preventDefault
-
-                document.addEventListener('touchmove', (e) => {
-                    if (touchLookActive) {
-                        e.preventDefault(); // Prevent scrolling while looking
-                        const currentTouchX = e.changedTouches[0].clientX;
-                        const currentTouchY = e.changedTouches[0].clientY;
-
-                        const movementX = currentTouchX - lastTouchX;
-                        const movementY = currentTouchY - lastTouchY;
-
-                        const yawSpeed = 0.005; // Adjusted for touch sensitivity
-                        const pitchSpeed = 0.005; // Adjusted for touch sensitivity
-
-                        if (playerGroup) {
-                            playerGroup.rotation.y -= movementX * yawSpeed;
-                        }
-
-                        if (camera) {
-                            camera.rotation.x -= movementY * pitchSpeed;
-                            camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
-                        }
-
-                        lastTouchX = currentTouchX;
-                        lastTouchY = currentTouchY;
-                    }
-                }, { passive: false }); // Use passive: false to allow preventDefault
-
-                document.addEventListener('touchend', (e) => {
-                    // Reset touchLookActive only if no other touch is active, or if it was the touch that started the look.
-                    // This is simplified, for robust multi-touch, track individual touches by identifier.
-                    if (e.touches.length === 0) { // If all touches are ended
-                        touchLookActive = false;
-                    }
-                });
-
-
-                // Mobile Buttons
-                jumpButton.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    if (canJump) {
-                        playerBody.velocity.y = 5; // Jump strength
-                        canJump = false;
-                    }
-                });
-
-                runButton.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
+                // Start sprint
+                if (event.code === 'ShiftLeft') {
                     isSprinting = true;
-                });
-                runButton.addEventListener('touchend', (e) => {
-                    e.preventDefault();
+                }
+                // 'R' key for reload
+                if (event.code === 'KeyR' && !isReloading && currentAmmo < maxAmmo) {
+                    startReload();
+                }
+            });
+            document.addEventListener('keyup', (event) => {
+                keyboard[event.code] = false;
+                // Stop sprint
+                if (event.code === 'ShiftLeft') {
                     isSprinting = false;
-                });
+                }
+            });
 
-                scopeButton.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
+            // Mouse movement for view change
+            let isMouseLocked = false;
+            document.addEventListener('click', async (event) => { // Added async keyword
+                // Activate pointer lock on game screen click
+                if (document.pointerLockElement !== renderer.domElement) {
+                    renderer.domElement.requestPointerLock();
+                    // Start Tone.js audio context (requires user gesture)
+                    if (Tone.context.state !== 'running') {
+                        await Tone.start();
+                        console.log("AudioContext started by user interaction.");
+                    }
+                } else if (event.button === 0) { // Left click (fire gun)
+                    shootBullet();
+                }
+            });
+
+            // Prevent right-click context menu
+            document.addEventListener('contextmenu', (event) => {
+                event.preventDefault(); // Prevent default context menu
+            });
+
+            // Mouse button press (detect right click)
+            document.addEventListener('mousedown', (event) => {
+                if (event.button === 2) { // Right mouse click
                     isScoping = true;
                     toggleScopeUI(true);
-                });
-                scopeButton.addEventListener('touchend', (e) => {
-                    e.preventDefault();
+                }
+            });
+
+            // Mouse button release (release right click)
+            document.addEventListener('mouseup', (event) => {
+                if (event.button === 2) { // Right mouse click
                     isScoping = false;
                     toggleScopeUI(false);
-                });
+                }
+            });
 
-                fireButton.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    shootBullet();
-                });
 
-                reloadButton.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    startReload();
-                });
-            }
+            document.addEventListener('pointerlockchange', () => {
+                isMouseLocked = document.pointerLockElement === renderer.domElement;
+                // If pointer lock is released, exit scope mode
+                if (!isMouseLocked && isScoping) {
+                    isScoping = false;
+                    toggleScopeUI(false);
+                }
+            });
+
+            document.addEventListener('mousemove', (event) => {
+                if (isMouseLocked) {
+                    const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+                    const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+                    const yawSpeed = 0.002;
+                    const pitchSpeed = 0.002;
+
+                    // Mouse X movement rotates playerGroup around Y-axis (player body rotation)
+                    if (playerGroup) {
+                        playerGroup.rotation.y -= movementX * yawSpeed;
+                    }
+
+                    // Mouse Y movement rotates camera around X-axis (up/down view)
+                    if (camera) {
+                        camera.rotation.x -= movementY * pitchSpeed;
+
+                        // Limit camera pitch (-90 to +90 degrees)
+                        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+                    }
+                }
+            });
         }
 
         // Game update loop
@@ -1475,17 +1138,11 @@
             const currentMoveSpeed = isSprinting ? sprintSpeed : walkSpeed; // Apply sprint speed
             const inputVector = new THREE.Vector3(); // User input vector (x: left/right, y: up/down, z: forward/backward)
 
-            if (isMobile) {
-                // Use mobile joystick input
-                inputVector.copy(touchMoveVector);
-            } else {
-                // Use keyboard input
-                // W and S key function changed
-                if (keyboard['KeyS']) { inputVector.z -= 1; } // S now moves forward
-                if (keyboard['KeyW']) { inputVector.z += 1; } // W now moves backward
-                if (keyboard['KeyA']) { inputVector.x -= 1; } // A is left
-                if (keyboard['KeyD']) { inputVector.x += 1; } // D is right
-            }
+            // W and S key function changed
+            if (keyboard['KeyS']) { inputVector.z -= 1; } // S now moves forward
+            if (keyboard['KeyW']) { inputVector.z += 1; } // W now moves backward
+            if (keyboard['KeyA']) { inputVector.x -= 1; } // A is left
+            if (keyboard['KeyD']) { inputVector.x += 1; } // D is right
 
             if (inputVector.lengthSq() > 0) { // If there is movement input
                 inputVector.normalize(); // Normalize input vector
