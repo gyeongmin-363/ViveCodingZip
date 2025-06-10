@@ -1,0 +1,1639 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D FPS</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <!-- Tone.js CDN 추가 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        /* 기본 HTML 및 body 스타일 */
+        html, body {
+            margin: 0;
+            overflow: hidden; /* 스크롤바 숨기기 */
+            height: 100%;
+            font-family: 'Inter', sans-serif; /* Inter 폰트 사용 */
+            background-color: #1a1a1a; /* 어두운 배경 */
+            color: #f0f0f0; /* 밝은 텍스트 */
+            cursor: none; /* 기본 커서 숨기기 */
+            -webkit-user-select: none; /* iOS Safari에서 텍스트 선택 방지 */
+            -moz-user-select: none;    /* Firefox에서 텍스트 선택 방지 */
+            -ms-user-select: none;     /* Internet Explorer/Edge에서 텍스트 선택 방지 */
+            user-select: none;         /* 표준 속성: 텍스트 선택 방지 */
+            touch-action: manipulation; /* 더블 탭 확대/축소 방지 */
+        }
+
+        /* 캔버스 스타일 */
+        canvas {
+            display: block; /* 캔버스 아래 여백 제거 */
+            width: 100vw; /* 뷰포트 너비에 맞춤 */
+            height: 100vh; /* 뷰포트 높이에 맞춤 */
+            border-radius: 8px; /* 둥근 모서리 */
+        }
+
+        /* 메시지 박스 스타일 */
+        #messageBox {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 15px 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            font-size: 1.2em;
+            color: #ffe082; /* 밝은 노란색 텍스트 */
+            text-align: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+            z-index: 1000;
+            border: 1px solid #444; /* 경계선 추가 */
+        }
+
+        #messageBox.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* 컨트롤 설명 (데스크톱 전용, 모바일에서는 숨김) */
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: #bbb;
+            font-size: 0.9em;
+            text-align: center;
+            z-index: 900;
+        }
+
+        /* 에임 십자가 스타일 */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            z-index: 999;
+            pointer-events: none; /* 마우스 이벤트 무시 */
+            background-color: transparent; /* 초기에는 투명 */
+        }
+
+        #crosshair.visible::before,
+        #crosshair.visible::after {
+            content: '';
+            position: absolute;
+            background-color: #00ff00; /* 녹색 십자가 */
+        }
+
+        #crosshair.visible::before {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #crosshair.visible::after {
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* 스코어 표시 스타일 */
+        #scoreDisplay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 1.5em;
+            color: #ffffff;
+            z-index: 1000;
+        }
+
+        /* 스코프 오버레이 스타일 */
+        #scopeOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.1); /* 약간 투명한 배경으로 기본 뷰를 살짝 어둡게 */
+            display: none; /* 초기에는 숨김 */
+            z-index: 1001; /* 다른 UI 요소보다 위에 */
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        #scopeReticle {
+            width: 80vh; /* 뷰포트 높이의 80%를 차지하도록 */
+            height: 80vh;
+            border: 2px solid green;
+            border-radius: 50%; /* 원형 스코프 */
+            /* 여기서 box-shadow를 사용하여 원형 외부를 어둡게 처리하고, 원 내부는 투명하게 유지 */
+            box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.9); /* 매우 큰 그림자로 화면 전체를 덮고, 원형만 투명하게 */
+            position: relative;
+            background-color: transparent; /* 내부 투명하게 유지 */
+            pointer-events: none; /* 스코프 UI 자체가 마우스 이벤트를 가로채지 않도록 */
+        }
+
+        #scopeReticle::before,
+        #scopeReticle::after {
+            content: '';
+            position: absolute;
+            background-color: #00ff00; /* 녹색 십자가 */
+        }
+        #scopeReticle::before { /* 수직선 */
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #scopeReticle::after { /* 수평선 */
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* 적 위치 표시 UI */
+        #enemyIndicatorContainer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* UI 요소가 마우스 이벤트를 가로채지 않도록 */
+            z-index: 1002; /* 다른 UI 위에 위치 */
+        }
+
+        #enemyIndicator {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: red;
+            border-radius: 50%;
+            display: none; /* 초기에는 숨김 */
+            transform-origin: center; /* 회전 중심 설정 */
+            border: 2px solid white; /* 테두리 */
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); /* 그림자 효과 */
+        }
+
+        /* Ammo Display Style */
+        #ammoDisplay {
+            position: absolute;
+            bottom: 100px;
+            right: 30px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 1.2em;
+            color: #ffffff;
+            z-index: 1000;
+            min-width: 80px; /* Ensure consistent width */
+            text-align: center;
+        }
+
+        /* Reload Progress Circle Style */
+        #reloadProgress {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 5px solid rgba(255, 255, 255, 0.2); /* Light gray base */
+            display: none; /* Hidden by default */
+            z-index: 1003; /* Above crosshair */
+            box-sizing: border-box; /* Padding/border included in width/height */
+        }
+
+        /* 모바일 컨트롤 스타일 */
+        #mobileControls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%; /* 전체 화면을 덮어 터치 이벤트 처리 */
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            z-index: 1000; /* UI 요소보다 위에 */
+            pointer-events: none; /* 기본적으로 비활성화, 자식 버튼만 활성화 */
+            visibility: hidden; /* 초기에는 숨김 */
+        }
+
+        #mobileControls.active {
+            visibility: visible;
+            pointer-events: auto; /* 활성화되면 이벤트 처리 */
+        }
+
+        .joystick-area {
+            width: 40%; /* 화면의 40%를 조이스틱 영역으로 */
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            padding-bottom: 20px; /* 조이스틱을 하단에 배치 */
+            box-sizing: border-box;
+            pointer-events: auto; /* 조이스틱 영역 이벤트 활성화 */
+        }
+
+        #leftJoystick, #rightJoystick {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0.7;
+            touch-action: none; /* 터치 액션 방지 */
+        }
+
+        #leftJoystick div, #rightJoystick div {
+            width: 70px;
+            height: 70px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+        }
+
+        .mobile-button-container {
+            width: 20%; /* 중간 영역 */
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            padding-bottom: 20px;
+            box-sizing: border-box;
+            pointer-events: none; /* 이 컨테이너는 이벤트를 받지 않고 자식 버튼만 받음 */
+        }
+
+        .mobile-button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px; /* 버튼 간 간격 */
+        }
+
+        .mobile-button {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background-color: rgba(0, 150, 255, 0.6);
+            color: white;
+            font-size: 1.1em;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 10px rgba(0, 150, 255, 0.4);
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            pointer-events: auto; /* 버튼 이벤트 활성화 */
+            user-select: none; /* 텍스트 선택 방지 */
+            -webkit-tap-highlight-color: transparent; /* 탭 하이라이트 제거 */
+            font-weight: bold;
+        }
+
+        .mobile-button:active {
+            background-color: rgba(0, 100, 200, 0.8);
+            box-shadow: 0 0 15px rgba(0, 150, 255, 0.8);
+        }
+
+        .mobile-button.fire { background-color: rgba(255, 0, 0, 0.6); }
+        .mobile-button.fire:active { background-color: rgba(200, 0, 0, 0.8); }
+
+        .mobile-button.scope { background-color: rgba(0, 200, 0, 0.6); }
+        .mobile-button.scope:active { background-color: rgba(0, 150, 0, 0.8); }
+
+        /* 데스크톱에서는 모바일 컨트롤 숨기기 */
+        @media (min-width: 769px) {
+            #mobileControls {
+                display: none;
+            }
+        }
+
+        /* 모바일에서는 데스크톱 컨트롤 숨기기 */
+        @media (max-width: 768px) {
+            #controls {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="messageBox"></div>
+    <div id="controls">
+        WASD 이동 |  스페이스바로 점프 | 좌 Shift로 달리기 | 마우스로 시점 변경 | 좌클릭으로 총 발사 | 우클릭 유지 시 스코프 모드 | R로 재장전
+    </div>
+    <div id="crosshair" class="visible"></div>
+    <div id="scoreDisplay">점수: 0</div>
+    <div id="scopeOverlay">
+        <div id="scopeReticle"></div>
+    </div>
+    <div id="enemyIndicatorContainer">
+        <div id="enemyIndicator"></div>
+    </div>
+    <!-- 총알 개수, 재장전 진행도 추가 (총 모델링은 Three.js로 직접 생성) -->
+    <div id="ammoDisplay"></div>
+    <div id="reloadProgress"></div>
+
+    <!-- 모바일 가상 터치패드 -->
+    <div id="mobileControls">
+        <div class="joystick-area">
+            <div id="leftJoystick"><div></div></div>
+        </div>
+        <div class="mobile-button-container">
+            <div class="mobile-button-group">
+                <div id="jumpButton" class="mobile-button">점프</div>
+                <div id="runButton" class="mobile-button">달리기</div>
+                <div id="reloadButton" class="mobile-button">재장전</div>
+            </div>
+        </div>
+        <div class="joystick-area">
+            <div id="rightJoystick"><div></div></div>
+            <div class="mobile-button-group" style="position: absolute; right: 20px; bottom: 20px;">
+                <div id="scopeButton" class="mobile-button scope">스코프</div>
+                <div id="fireButton" class="mobile-button fire">발사</div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Global variables
+        let scene, camera, renderer;
+        let world; // Cannon.js physics world
+        let playerBody, playerMesh; // Player physics body and mesh
+        let playerGroup; // THREE.Group to manage player view and rotation
+        let keyboard = {}; // Store keyboard input state
+        let prevTime = performance.now(); // For frame time calculation
+        let canJump = true; // Flag if player can jump
+        let lastShotTime = 0; // Last shot time
+        const shotCooldown = 200; // Shot cooldown (milliseconds)
+
+        // Player radius
+        const playerRadius = 0.7; 
+
+        // Map size (50 units width/depth)
+        const mapSize = 50; 
+        const wallHeight = 5; // Wall height
+        const wallThickness = 1; // Wall thickness
+
+        // Array of enemy characters
+        const enemies = [];
+
+        // Point light and mesh for muzzle flash (simplified)
+        let muzzleFlashLight;
+        let muzzleFlashMesh; // Main visual effect for muzzle flash
+
+        // Sound related variables (using Tone.js)
+        let gunSoundSynth; // Gun firing sound synthesizer
+        let hitSoundSynth; // Hit sound synthesizer
+
+        // Message box variables
+        let messageTimeout;
+        const messageBox = document.getElementById('messageBox');
+
+        // Lists for physics bodies and meshes to remove (processed next frame)
+        let bodiesToRemove = [];
+        let meshesToRemove = [];
+
+        // Texture loader
+        let textureLoader;
+
+        // Score variable
+        let score = 0;
+        let scoreDisplay; // Score display DOM element
+
+        // Scope mode related variables
+        let isScoping = false;
+        let scopeOverlay;
+        let crosshairElement;
+        let originalCameraFov; // Store original camera FOV
+
+        // Sprinting related variables
+        let isSprinting = false;
+        const walkSpeed = 5;
+        const sprintSpeed = 10; // Sprint speed
+
+        // Enemy indicator UI element
+        let enemyIndicator; // Global declaration
+
+        // Enemy AI related variables
+        const enemyMoveSpeed = 2; // Enemy movement speed
+        const enemyJumpStrength = 4; // Enemy jump strength
+        const enemyMoveChangeInterval = 3000; // Enemy direction change interval (milliseconds)
+        const enemyJumpCooldown = 5000; // Enemy jump cooldown (milliseconds)
+
+        // Ammo system variables
+        let currentAmmo = 20;
+        const maxAmmo = 20;
+        let isReloading = false;
+        const reloadTime = 1000; // 1 second
+        let ammoDisplayElement;
+        let reloadProgressElement;
+        let gunMesh; // 3D gun model mesh
+
+        // Collision group definitions (bitmask)
+        const GROUND = 1;      // 000001
+        const PLAYER = 2;      // 000010
+        const WALL = 4;        // 000100
+        const ENEMY_BODY = 16; // 010000 (Enemy entire body)
+
+        // Mobile control variables
+        let isMobile = false;
+        let leftJoystick = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0, element: null, knob: null };
+        let rightJoystick = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0, element: null, knob: null };
+        let touchMoveVector = new THREE.Vector3(); // For left joystick movement
+        let touchLookVector = new THREE.Vector2(); // For right joystick camera movement
+        const joystickDeadZone = 10; // Pixels
+        const joystickMaxDistance = 50; // Pixels from center
+        let mobileControlsElement;
+
+
+        // Function to display messages
+        function showMessage(message, duration = 3000) {
+            clearTimeout(messageTimeout); // Clear previous timer
+            messageBox.textContent = message;
+            messageBox.classList.add('show');
+
+            messageTimeout = setTimeout(() => {
+                messageBox.classList.remove('show');
+            }, duration);
+        }
+
+        // Function to update ammo display
+        function updateAmmoDisplay() {
+            if (ammoDisplayElement) {
+                ammoDisplayElement.textContent = `총알: ${currentAmmo}/${maxAmmo}`;
+            }
+        }
+
+        // Function to toggle scope UI
+        function toggleScopeUI(show) {
+            if (show) {
+                scopeOverlay.style.display = 'flex'; // Set to flex for centering scope elements
+                crosshairElement.classList.remove('visible'); // Hide default crosshair
+                // Zoom in camera FOV
+                camera.fov = 20; // Zoomed in FOV value (originally 75)
+                camera.updateProjectionMatrix();
+            } else {
+                scopeOverlay.style.display = 'none';
+                crosshairElement.classList.add('visible'); // Show default crosshair again
+                // Restore camera FOV
+                camera.fov = originalCameraFov;
+                camera.updateProjectionMatrix();
+            }
+        }
+
+        // Game initialization function
+        function init() {
+            try {
+                // Check if on mobile device
+                isMobile = /Mobi|Android/i.test(navigator.userAgent);
+                mobileControlsElement = document.getElementById('mobileControls');
+                if (isMobile) {
+                    mobileControlsElement.classList.add('active'); // Show mobile controls
+                    document.getElementById('controls').style.display = 'none'; // Hide desktop controls
+                } else {
+                    mobileControlsElement.style.display = 'none'; // Hide mobile controls
+                    document.getElementById('controls').style.display = 'block'; // Show desktop controls
+                }
+
+                // Create scene
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x222222); // Dark background color
+
+                // Create camera
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                originalCameraFov = camera.fov; // Store original FOV
+
+                // Create renderer
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(renderer.domElement);
+
+                // Initialize physics world (Cannon.js)
+                world = new CANNON.World();
+                world.gravity.set(0, -9.82, 0); // Set gravity
+                world.broadphase = new CANNON.NaiveBroadphase(); // Collision detection method
+                world.solver.iterations = 30; // Increase physics calculation iterations for better collision detection
+                world.defaultContactMaterial.friction = 0.5; // Default friction
+                world.defaultContactMaterial.restitution = 0.1; // Default restitution
+
+                // Initialize texture loader
+                textureLoader = new THREE.TextureLoader();
+
+                // Add skybox
+                const cubeTextureLoader = new THREE.CubeTextureLoader();
+                
+                // Function to generate skybox texture using Canvas
+                function generateSkyboxTexture(width, height, color1, color2 = null) {
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    if (color2) {
+                        // Create a linear gradient from top to bottom
+                        const gradient = context.createLinearGradient(0, 0, 0, height);
+                        gradient.addColorStop(0, color1); // Top color
+                        gradient.addColorStop(1, color2); // Bottom color
+                        context.fillStyle = gradient;
+                    } else {
+                        context.fillStyle = color1; // Solid color
+                    }
+                    context.fillRect(0, 0, canvas.width, canvas.height);
+                    return canvas.toDataURL('image/png');
+                }
+
+                const skyboxTextures = [
+                    generateSkyboxTexture(256, 256, '#87CEEB'), // posx (Right) - Sky Blue
+                    generateSkyboxTexture(256, 256, '#87CEEB'), // negx (Left) - Sky Blue
+                    generateSkyboxTexture(256, 256, '#ADD8E6'), // posy (Up) - Light Blue (lighter sky)
+                    generateSkyboxTexture(256, 256, '#6A5ACD'), // negy (Down) - Dark Blue (darker horizon/ground)
+                    generateSkyboxTexture(256, 256, '#87CEEB'), // posz (Front) - Sky Blue
+                    generateSkyboxTexture(256, 256, '#87CEEB')  // negz (Back) - Sky Blue
+                ];
+
+                const skybox = cubeTextureLoader.load(skyboxTextures);
+                scene.background = skybox;
+
+                // Create ground
+                const groundShape = new CANNON.Plane();
+                const groundBody = new CANNON.Body({
+                    mass: 0,
+                    shape: groundShape,
+                    collisionFilterGroup: GROUND,
+                    collisionFilterMask: PLAYER | ENEMY_BODY
+                }); // mass: 0 for static object
+                groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2); // Rotate ground to lay on XY plane
+                world.addBody(groundBody);
+
+                // Create ground mesh (Three.js) - match map size
+                const groundGeometry = new THREE.PlaneGeometry(mapSize, mapSize);
+                const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x444444, side: THREE.DoubleSide });
+                const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+                groundMesh.rotation.x = -Math.PI / 2; // Rotate ground mesh correctly in Three.js
+                scene.add(groundMesh);
+
+                // Create player physics body
+                const playerShape = new CANNON.Sphere(playerRadius); // Player collision sphere
+                playerBody = new CANNON.Body({
+                    mass: 70,
+                    shape: playerShape,
+                    collisionFilterGroup: PLAYER,
+                    collisionFilterMask: GROUND | WALL | ENEMY_BODY
+                }); // Player weight
+                playerBody.position.set(0, playerRadius, 0); // Initial position (above ground, player center at ground level)
+                playerBody.angularFactor = new CANNON.Vec3(0, 0, 0); // Prevent player rotation
+                world.addBody(playerBody);
+
+                // Player visual mesh (transparent sphere)
+                const playerGeometry = new THREE.SphereGeometry(playerRadius, 32, 32);
+                const playerMaterial = new THREE.MeshLambertMaterial({ color: 0x00ff00, transparent: true, opacity: 0.0 }); // Set transparent
+                playerMesh = new THREE.Mesh(playerGeometry, playerMaterial);
+                scene.add(playerMesh);
+
+                // Create playerGroup (parent for camera, handles horizontal rotation)
+                playerGroup = new THREE.Group();
+                scene.add(playerGroup); // Add playerGroup to scene
+
+                // Add camera as child of playerGroup
+                camera.position.set(0, 0, 0); // Camera position at playerGroup center (eye level adjusted in rendering)
+                playerGroup.add(camera);
+
+                // Create 3D Gun Model
+                const gunMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+
+                // Main body of the gun
+                const gunBodyGeometry = new THREE.BoxGeometry(0.08, 0.07, 0.25); 
+                const gunBody = new THREE.Mesh(gunBodyGeometry, gunMaterial);
+
+                // Handle (grip)
+                const gunHandleGeometry = new THREE.BoxGeometry(0.04, 0.1, 0.08);
+                const gunHandle = new THREE.Mesh(gunHandleGeometry, gunMaterial);
+                gunHandle.position.set(0.03, -0.05, 0.08); // Position relative to gun body
+
+                // Barrel
+                const gunBarrelGeometry = new THREE.CylinderGeometry(0.012, 0.012, 0.15, 8);
+                const gunBarrel = new THREE.Mesh(gunBarrelGeometry, gunMaterial);
+                gunBarrel.rotation.x = Math.PI / 2; // Point forward along local Z
+                gunBarrel.position.set(0, 0.005, -0.125); // Position relative to gun body (half length of barrel)
+
+                // Add a small sight or front piece
+                const gunSightGeometry = new THREE.BoxGeometry(0.01, 0.01, 0.02);
+                const gunSight = new THREE.Mesh(gunSightGeometry, new THREE.MeshLambertMaterial({ color: 0x555555 }));
+                gunSight.position.set(0, 0.04, -0.14); // Position relative to gun body, slightly above barrel
+
+                // Create a group to hold all gun parts
+                gunMesh = new THREE.Group();
+                gunMesh.add(gunBody);
+                gunMesh.add(gunHandle);
+                gunMesh.add(gunBarrel);
+                gunMesh.add(gunSight);
+
+                // Position the entire gun group relative to the camera
+                // Adjusted positions to point to center and not cover too much screen
+                // Aiming point: The origin of gunMesh should point directly forward from the camera center.
+                // gunMesh.position.set(right/left, up/down, forward/back)
+                gunMesh.position.set(0.18, -0.1, -0.2); // Right, slightly down, and forward from camera
+                gunMesh.rotation.set(-0.05, 0.3, 0); // Slight rotation for a natural hold
+                gunMesh.scale.set(1.5, 1.5, 1.5); // Scale up for better visibility
+                
+                camera.add(gunMesh); // Add the gun to the camera so it moves with the view
+
+                // Muzzle Flash Light (attached to the barrel tip of the gun)
+                muzzleFlashLight = new THREE.PointLight(0xffff00, 0, 0.2); // Color, intensity (initial 0), distance
+                // Calculate muzzle tip position relative to gunMesh
+                // gunBarrel is at (0, 0.005, -0.125) relative to gunBody. Its length is 0.15, so tip is at -0.125 - (0.15/2) = -0.125 - 0.075 = -0.2
+                muzzleFlashLight.position.set(0, 0.005, -0.2); // Position at the end of the gun barrel (relative to gunMesh)
+                gunMesh.add(muzzleFlashLight); // Child of gunMesh
+
+                // Muzzle Flash Mesh (Visual effect) - small spark
+                const muzzleFlashGeometry = new THREE.BufferGeometry();
+                const vertices = new Float32Array([
+                    0.0, 0.0, 0.0,   // Center
+                    0.015, 0.015, 0.0, // Top-right
+                    -0.015, 0.015, 0.0, // Top-left
+                    0.015, -0.015, 0.0, // Bottom-right
+                    -0.015, -0.015, 0.0  // Bottom-left
+                ]);
+                const indices = new Uint16Array([
+                    0, 1, 2, // First triangle
+                    0, 3, 4  // Second triangle
+                ]);
+                muzzleFlashGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                muzzleFlashGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
+                
+                const muzzleFlashMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xffa500, // Orange
+                    transparent: true, 
+                    opacity: 0.9,
+                    side: THREE.DoubleSide
+                });
+                muzzleFlashMesh = new THREE.Mesh(muzzleFlashGeometry, muzzleFlashMaterial);
+                muzzleFlashMesh.position.set(0, 0.005, -0.205); // Slightly in front of barrel tip
+                muzzleFlashMesh.scale.set(0.5, 0.5, 0.5); // Start small
+                muzzleFlashMesh.visible = false;
+                gunMesh.add(muzzleFlashMesh); // Child of gunMesh
+
+
+                // Tone.js sound settings (gun fire sound)
+                gunSoundSynth = new Tone.Synth({
+                    oscillator: {
+                        type: "sawtooth" // Sawtooth wave for sharp sound
+                    },
+                    envelope: {
+                        attack: 0.01, // Short attack
+                        decay: 0.1,   // Fast decay
+                        sustain: 0.0, // No sustain
+                        release: 0.05 // Fast release
+                    }
+                }).toDestination();
+
+                // Tone.js sound settings (hit sound)
+                hitSoundSynth = new Tone.MembraneSynth({
+                    pitchDecay: 0.05,
+                    octaves: 8,
+                    envelope: {
+                        attack: 0.001,
+                        decay: 0.4,
+                        sustain: 0.01,
+                        release: 0.01,
+                        attackCurve: "exponential"
+                    }
+                }).toDestination();
+                hitSoundSynth.volume.value = -10; // Adjust hit sound volume
+
+                // Generate dungeon walls
+                generateDungeonWalls();
+
+                // Spawn initial enemy (only one at a time)
+                spawnEnemy(); // Spawn first enemy
+
+                // Add lighting
+                const ambientLight = new THREE.AmbientLight(0x404040); // Ambient light
+                scene.add(ambientLight);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Directional light
+                directionalLight.position.set(5, 10, 7.5).normalize();
+                scene.add(directionalLight);
+
+                // Initialize score display
+                scoreDisplay = document.getElementById('scoreDisplay');
+                scoreDisplay.textContent = '점수: ' + score;
+
+                // Get scope UI elements
+                scopeOverlay = document.getElementById('scopeOverlay');
+                crosshairElement = document.getElementById('crosshair');
+                
+                // Get enemy indicator UI element
+                enemyIndicator = document.getElementById('enemyIndicator');
+
+                // Get ammo system UI elements
+                ammoDisplayElement = document.getElementById('ammoDisplay');
+                reloadProgressElement = document.getElementById('reloadProgress');
+
+                // Set initial UI states
+                toggleScopeUI(false); // Show default crosshair, hide scope
+                updateAmmoDisplay(); // Update ammo display initially
+
+                // Set up event listeners
+                setupEventListeners();
+
+            
+
+            } catch (error) {
+                console.error("Initialization error:", error);
+                showMessage("게임 초기화 중 오류가 발생했습니다. 개발자 콘솔을 확인해주세요.", 5000);
+            }
+        }
+
+        // Function to generate dungeon walls with a brick texture
+        function generateDungeonWalls() {
+            // Create brick texture directly on a Canvas element
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 128; // Texture size
+            canvas.height = 128;
+
+            // Background color (Malta brick feel)
+            context.fillStyle = '#6B584E'; // Dark brown
+            context.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Brick color (light brown)
+            context.fillStyle = '#A38B7A';
+
+            const brickWidth = 64;
+            const brickHeight = 32;
+            const mortarThickness = 4; // Mortar thickness
+
+            // First row of bricks
+            for (let i = 0; i < canvas.width / brickWidth; i++) {
+                context.fillRect(i * brickWidth, 0, brickWidth - mortarThickness, brickHeight - mortarThickness);
+            }
+
+            // Second row of bricks (half offset)
+            context.translate(brickWidth / 2, brickHeight);
+            for (let i = 0; i < canvas.width / brickWidth + 1; i++) {
+                context.fillRect(i * brickWidth, 0, brickWidth - mortarThickness, brickHeight - mortarThickness);
+            }
+            context.translate(-brickWidth / 2, -brickHeight); // Revert translation
+
+            // Third row of bricks (same as first)
+            context.translate(0, brickHeight * 2);
+            for (let i = 0; i < canvas.width / brickWidth; i++) {
+                context.fillRect(i * brickWidth, 0, brickWidth - mortarThickness, brickHeight - mortarThickness);
+            }
+            context.translate(0, -brickHeight * 2); // Revert translation
+
+            // Convert canvas content to base64 image data
+            const textureDataURL = canvas.toDataURL('image/png');
+
+            const wallTexture = textureLoader.load(textureDataURL,
+                undefined,
+                undefined,
+                (err) => {
+                    console.error('An error occurred loading the generated texture:', err);
+                    // Fallback color
+                    wallMaterial.color.setHex(0x4A3F2A);
+                    wallMaterial.needsUpdate = true;
+                }
+            );
+            wallTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
+            wallTexture.wrapT = THREE.RepeatWrapping; // Repeat vertically
+            // Adjust texture repetition based on map size and wall height for tiling effect
+            wallTexture.repeat.set(mapSize / 10, wallHeight / 2); 
+
+            const wallMaterial = new THREE.MeshLambertMaterial({ map: wallTexture });
+            
+            // Cannon.js Box shape takes half extents as arguments
+            const longWallShape = new CANNON.Box(new CANNON.Vec3(wallThickness / 2, wallHeight / 2, mapSize / 2)); 
+            const shortWallShape = new CANNON.Box(new CANNON.Vec3(mapSize / 2, wallHeight / 2, wallThickness / 2)); 
+
+            // Place walls
+            // East wall
+            const wallEastBody = new CANNON.Body({
+                mass: 0,
+                shape: longWallShape,
+                collisionFilterGroup: WALL,
+                collisionFilterMask: PLAYER | ENEMY_BODY
+            });
+            wallEastBody.position.set(mapSize / 2, wallHeight / 2, 0);
+            world.addBody(wallEastBody);
+            const wallEastMesh = new THREE.Mesh(new THREE.BoxGeometry(wallThickness, wallHeight, mapSize), wallMaterial);
+            wallEastMesh.position.copy(wallEastBody.position);
+            scene.add(wallEastMesh);
+
+            // West wall
+            const wallWestBody = new CANNON.Body({
+                mass: 0,
+                shape: longWallShape,
+                collisionFilterGroup: WALL,
+                collisionFilterMask: PLAYER | ENEMY_BODY
+            });
+            wallWestBody.position.set(-mapSize / 2, wallHeight / 2, 0);
+            world.addBody(wallWestBody);
+            const wallWestMesh = new THREE.Mesh(new THREE.BoxGeometry(wallThickness, wallHeight, mapSize), wallMaterial);
+            wallWestMesh.position.copy(wallWestBody.position);
+            scene.add(wallWestMesh);
+
+            // North wall
+            const wallNorthBody = new CANNON.Body({
+                mass: 0,
+                shape: shortWallShape,
+                collisionFilterGroup: WALL,
+                collisionFilterMask: PLAYER | ENEMY_BODY
+            });
+            wallNorthBody.position.set(0, wallHeight / 2, mapSize / 2);
+            world.addBody(wallNorthBody);
+            const wallNorthMesh = new THREE.Mesh(new THREE.BoxGeometry(mapSize, wallHeight, wallThickness), wallMaterial);
+            wallNorthMesh.position.copy(wallNorthBody.position);
+            scene.add(wallNorthMesh);
+
+            // South wall
+            const wallSouthBody = new CANNON.Body({
+                mass: 0,
+                shape: shortWallShape,
+                collisionFilterGroup: WALL,
+                collisionFilterMask: PLAYER | ENEMY_BODY
+            });
+            wallSouthBody.position.set(0, wallHeight / 2, -mapSize / 2);
+            world.addBody(wallSouthBody);
+            const wallSouthMesh = new THREE.Mesh(new THREE.BoxGeometry(mapSize, wallHeight, wallThickness), wallMaterial);
+            wallSouthMesh.position.copy(wallSouthBody.position);
+            scene.add(wallSouthMesh);
+        }
+
+        // Function to create an enemy character
+        function createEnemy(x, y, z) {
+            const enemyBodyRadius = 0.4;
+            const enemyHeadRadius = 0.25;
+
+            // Create a single CANNON.Body for the entire enemy
+            const enemyBody = new CANNON.Body({
+                mass: 10, // Total mass for the enemy
+                position: new CANNON.Vec3(x, y + enemyBodyRadius, z), // Base position (y is ground + body radius)
+                angularFactor: new CANNON.Vec3(0, 0, 0), // Prevent rotation
+                collisionFilterGroup: ENEMY_BODY, // This body belongs to ENEMY_BODY group
+                collisionFilterMask: PLAYER | WALL | GROUND
+            });
+
+            // Add body sphere to the compound-like body
+            const bodyShape = new CANNON.Sphere(enemyBodyRadius);
+            const bodyOffset = new CANNON.Vec3(0, 0, 0); // Body is at the center of the enemyBody
+            enemyBody.addShape(bodyShape, bodyOffset);
+
+            // Add head sphere to the compound-like body, offset relative to enemyBody's center
+            const headShape = new CANNON.Sphere(enemyHeadRadius);
+            const headOffset = new CANNON.Vec3(0, enemyBodyRadius + enemyHeadRadius, 0);
+            enemyBody.addShape(headShape, headOffset);
+
+            world.addBody(enemyBody);
+
+            // Visual group for enemy (to hold both meshes)
+            const enemyVisualGroup = new THREE.Group();
+            scene.add(enemyVisualGroup);
+
+            // Body Mesh (positioned relative to enemyVisualGroup's origin)
+            const bodyMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(enemyBodyRadius, 16, 16),
+                new THREE.MeshLambertMaterial({ color: 0x880000 }) // Darker red for body
+            );
+            bodyMesh.position.copy(bodyOffset); // Position relative to group center
+            enemyVisualGroup.add(bodyMesh);
+
+            // Head Mesh (positioned relative to enemyVisualGroup's origin)
+            const headMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(enemyHeadRadius, 16, 16),
+                new THREE.MeshLambertMaterial({ color: 0xff0000 }) // Bright red for head
+            );
+            headMesh.position.copy(headOffset); // Use the same offset as the Cannon.js head shape
+            enemyVisualGroup.add(headMesh);
+
+            enemies.push({
+                body: enemyBody, // Single Cannon body representing the whole enemy
+                meshGroup: enemyVisualGroup, // Single Three.js group
+                health: 2, // Initial health for the enemy
+                // Store references to the shapes for collision detection
+                cannonBodyShape: bodyShape, // Cannon.js Body shape reference
+                cannonHeadShape: headShape,  // Cannon.js Head shape reference
+                randomMoveDirection: new CANNON.Vec3(0, 0, 0),
+                lastMoveChangeTime: performance.now(),
+                canEnemyJump: true,
+                lastEnemyJumpTime: performance.now(),
+                originalBodyColor: bodyMesh.material.color.getHex(), // Store original colors for hit effect
+                originalHeadColor: headMesh.material.color.getHex()
+            });
+        }
+
+        // Function to spawn an enemy (called when an enemy is defeated)
+        function spawnEnemy() {
+            // Don't spawn if an enemy already exists (only one at a time)
+            if (enemies.length > 0) {
+                console.warn("Attempted to spawn enemy but one already exists. Skipping.");
+                return;
+            }
+
+            const spawnMargin = 5; // Minimum spawn distance from walls
+            const actualSpawnRange = (mapSize / 2) - spawnMargin; // Actual spawnable range
+
+            let spawnX, spawnZ;
+            let attempts = 0;
+            const maxAttempts = 50; // Sufficient attempts
+
+            // Set minimum distance to avoid spawning near the player
+            const minPlayerDistance = 10; 
+
+            do {
+                spawnX = (Math.random() * 2 - 1) * actualSpawnRange; // -actualSpawnRange ~ +actualSpawnRange
+                spawnZ = (Math.random() * 2 - 1) * actualSpawnRange;
+                attempts++;
+                // Check if distance to player is greater than minPlayerDistance
+            } while (attempts < maxAttempts && 
+                     playerBody && 
+                     new THREE.Vector3(spawnX, playerBody.position.y, spawnZ).distanceTo(playerBody.position) < minPlayerDistance);
+
+            createEnemy(spawnX, 0.5, spawnZ); // y is above ground (playerBody.position.y is same as playerRadius)
+            showMessage("새로운 적이 나타났습니다!", 1500);
+        }
+
+        // Function to fire bullet (now always hitscan)
+        function shootBullet() {
+            if (isReloading) {
+                showMessage("재장전 중입니다!", 1000);
+                return;
+            }
+            if (currentAmmo <= 0) {
+                showMessage("총알이 부족합니다! R을 눌러 재장전하세요.", 1500);
+                return;
+            }
+
+            const currentTime = performance.now();
+            if (currentTime - lastShotTime < shotCooldown) {
+                return; // Return if cooldown is active
+            }
+            lastShotTime = currentTime;
+
+            // Decrement ammo and update display
+            currentAmmo--;
+            updateAmmoDisplay();
+
+            // Play gun firing sound
+            gunSoundSynth.triggerAttackRelease("C4", "8n"); // Play C4 note for 8th note duration
+
+            // Muzzle flash light effect
+            muzzleFlashLight.intensity = 1.0; // Brighten
+            muzzleFlashMesh.visible = true; // Show muzzle flash mesh
+            muzzleFlashMesh.rotation.z = Math.random() * Math.PI * 2; // Random rotation for spark effect
+            muzzleFlashMesh.scale.set(0.5 + Math.random()*0.5, 0.5 + Math.random()*0.5, 0.5 + Math.random()*0.5); // Random scale for spark effect
+
+
+            setTimeout(() => {
+                muzzleFlashLight.intensity = 0; // Dim back
+                muzzleFlashMesh.visible = false; // Hide muzzle flash mesh
+            }, 70); // Light up and show for a short duration
+
+            // Camera recoil effect (move camera back briefly then restore)
+            const recoilStrength = 0.05;
+            const recoilDuration = 70; // milliseconds
+            const initialCameraZ = camera.position.z;
+
+            // Move camera back (relative to playerGroup)
+            camera.position.z += recoilStrength;
+            
+            // Restore after a short delay
+            setTimeout(() => {
+                camera.position.z = initialCameraZ;
+            }, recoilDuration);
+
+            // Get camera's current world position and direction
+            const cameraWorldPosition = new THREE.Vector3();
+            camera.getWorldPosition(cameraWorldPosition);
+            
+            const cameraDirection = new THREE.Vector3();
+            camera.getWorldDirection(cameraDirection);
+
+            // Debug log: Player Y position and bullet fire direction Y-axis value (always output)
+            console.log('총 발사! 플레이어 Y 좌표:', playerBody.position.y.toFixed(2));
+            console.log('총알 발사 방향 Y (cameraDirection.y):', cameraDirection.y.toFixed(2));
+
+            // All shots now use hitscan logic
+            const rayFrom = new CANNON.Vec3(cameraWorldPosition.x, cameraWorldPosition.y, cameraWorldPosition.z);
+            // Cast ray 1000 units far for collision check
+            const rayTo = new CANNON.Vec3(
+                cameraWorldPosition.x + cameraDirection.x * 1000,
+                cameraWorldPosition.y + cameraDirection.y * 1000,
+                cameraWorldPosition.z + cameraDirection.z * 1000
+            );
+
+            const raycastResult = new CANNON.RaycastResult();
+            // Raycast collision mask: Check for collisions with walls and enemy bodies
+            const raycastOptions = {
+                collisionFilterMask: WALL | ENEMY_BODY,
+                skipBackfaces: true // Ignore backface collisions for optimization
+            };
+
+            world.raycastClosest(rayFrom, rayTo, raycastOptions, raycastResult);
+
+            if (raycastResult.hasHit) {
+                const collidedBody = raycastResult.body; // Collided physics body
+                const hitCannonShape = raycastResult.shape; // Specific hit shape (body or head)
+
+                let hitEnemy = null;
+                // Check if the collided physics body is an active enemy
+                for (let i = 0; i < enemies.length; i++) {
+                    const enemy = enemies[i];
+                    if (collidedBody === enemy.body) {
+                        hitEnemy = enemy;
+                        break;
+                    }
+                }
+
+                // If hitEnemy exists and is still in the active enemies array
+                if (hitEnemy && enemies.includes(hitEnemy)) {
+                    // Play hit sound
+                    hitSoundSynth.triggerAttackRelease("G3", "16n"); // Play G3 note on hit
+
+                    // Enemy hit color blink effect (store and restore original colors)
+                    const originalBodyColor = hitEnemy.originalBodyColor;
+                    const originalHeadColor = hitEnemy.originalHeadColor;
+                    
+                    hitEnemy.meshGroup.children[0].material.color.set(0xffff00); // Set body to yellow
+                    hitEnemy.meshGroup.children[1].material.color.set(0xffffff); // Set head to white
+                    
+                    setTimeout(() => {
+                        hitEnemy.meshGroup.children[0].material.color.set(originalBodyColor);
+                        hitEnemy.meshGroup.children[1].material.color.set(originalHeadColor);
+                    }, 100); // Restore to original color after 0.1 seconds
+
+                    // Check hitCannonShape for validity and log safely
+                    console.log("Hitscan hit! Hit shape ID:", (hitCannonShape ? hitCannonShape.id : 'undefined_shape'), 
+                                "Enemy Head Shape ID:", (hitEnemy.cannonHeadShape ? hitEnemy.cannonHeadShape.id : 'undefined_head_shape'), 
+                                "Body Shape ID:", (hitEnemy.cannonBodyShape ? hitEnemy.cannonBodyShape.id : 'undefined_body_shape'));
+                    
+                    if (hitCannonShape) { // Only execute damage logic if hitCannonShape is valid
+                        if (hitCannonShape === hitEnemy.cannonHeadShape) { // Direct object comparison
+                            hitEnemy.health -= 2;
+                            showMessage("헤드샷! 적 처치!", 2000);
+                            console.log("Hitscan: Headshot!");
+                        } else if (hitCannonShape === hitEnemy.cannonBodyShape) { // Direct object comparison
+                            hitEnemy.health -= 1;
+                            showMessage("몸통 명중!", 1500);
+                            console.log("Hitscan: Bodyshot!");
+                        } else {
+                            // Unexpected part hit (e.g., small components of enemy body or slight differences in physics modeling)
+                            console.log("Hitscan: Valid shape, but not head or body. Shape type:", hitCannonShape.type);
+                            hitEnemy.health -= 0.5; // Minor damage
+                            showMessage("적 명중! (약간의 피해)", 1000);
+                        }
+                    } else {
+                        console.error("hitCannonShape is undefined or null during collision in hitscan!");
+                    }
+
+                    if (hitEnemy.health <= 0) {
+                        // If not already in removal list, add it
+                        if (!bodiesToRemove.includes(hitEnemy.body)) {
+                            bodiesToRemove.push(hitEnemy.body);
+                            meshesToRemove.push(hitEnemy.meshGroup);
+
+                            const enemyIndex = enemies.indexOf(hitEnemy);
+                            if (enemyIndex !== -1) {
+                                enemies.splice(enemyIndex, 1);
+                            }
+
+                            showMessage("적을 처치했습니다! (+10점)", 2000);
+                            score += 10;
+                            scoreDisplay.textContent = '점수: ' + score;
+                            spawnEnemy();
+                        }
+                    }
+                }
+            }
+            // No physical bullets, so no bullet bodies/meshes to remove.
+        }
+
+        // Function to start reload
+        function startReload() {
+            if (isReloading || currentAmmo === maxAmmo) {
+                return; // Already reloading or full ammo
+            }
+
+            isReloading = true;
+            showMessage("재장전 중...", reloadTime + 500); // Message slightly longer than reload time
+            reloadProgressElement.style.display = 'block'; // Show progress circle
+            
+            let startTime = performance.now();
+            const updateProgress = () => {
+                const elapsed = performance.now() - startTime;
+                const progress = Math.min(1, elapsed / reloadTime);
+                // Use conic-gradient for circular fill effect
+                reloadProgressElement.style.backgroundImage = `conic-gradient(#00ff00 0% ${progress * 100}%, rgba(255,255,255,0.2) ${progress * 100}% 100%)`;
+
+                if (progress < 1) {
+                    requestAnimationFrame(updateProgress);
+                }
+            };
+            requestAnimationFrame(updateProgress); // Start animation
+
+            setTimeout(() => {
+                currentAmmo = maxAmmo;
+                isReloading = false;
+                updateAmmoDisplay();
+                reloadProgressElement.style.display = 'none'; // Hide progress circle
+                reloadProgressElement.style.backgroundImage = ''; // Reset background image
+                showMessage("재장전 완료!", 1000);
+            }, reloadTime);
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Update renderer and camera on window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Keyboard input processing (for desktop)
+            if (!isMobile) {
+                document.addEventListener('keydown', (event) => {
+                    keyboard[event.code] = true;
+                    // Spacebar jump (using canJump condition)
+                    if (event.code === 'Space' && canJump) {
+                        playerBody.velocity.y = 5; // Jump strength
+                        canJump = false; // Disable jump after jumping
+                    }
+                    // Start sprint
+                    if (event.code === 'ShiftLeft') {
+                        isSprinting = true;
+                    }
+                    // 'R' key for reload
+                    if (event.code === 'KeyR' && !isReloading && currentAmmo < maxAmmo) {
+                        startReload();
+                    }
+                });
+                document.addEventListener('keyup', (event) => {
+                    keyboard[event.code] = false;
+                    // Stop sprint
+                    if (event.code === 'ShiftLeft') {
+                        isSprinting = false;
+                    }
+                });
+
+                // Mouse movement for view change
+                let isMouseLocked = false;
+                document.addEventListener('click', async (event) => { // Added async keyword
+                    // Activate pointer lock on game screen click
+                    if (document.pointerLockElement !== renderer.domElement) {
+                        renderer.domElement.requestPointerLock();
+                        // Start Tone.js audio context (requires user gesture)
+                        if (Tone.context.state !== 'running') {
+                            await Tone.start();
+                            console.log("AudioContext started by user interaction.");
+                        }
+                    } else if (event.button === 0) { // Left click (fire gun)
+                        shootBullet();
+                    }
+                });
+
+                // Prevent right-click context menu
+                document.addEventListener('contextmenu', (event) => {
+                    event.preventDefault(); // Prevent default context menu
+                });
+
+                // Mouse button press (detect right click)
+                document.addEventListener('mousedown', (event) => {
+                    if (event.button === 2) { // Right mouse click
+                        isScoping = true;
+                        toggleScopeUI(true);
+                    }
+                });
+
+                // Mouse button release (release right click)
+                document.addEventListener('mouseup', (event) => {
+                    if (event.button === 2) { // Right mouse click
+                        isScoping = false;
+                        toggleScopeUI(false);
+                    }
+                });
+
+
+                document.addEventListener('pointerlockchange', () => {
+                    isMouseLocked = document.pointerLockElement === renderer.domElement;
+                    // If pointer lock is released, exit scope mode
+                    if (!isMouseLocked && isScoping) {
+                        isScoping = false;
+                        toggleScopeUI(false);
+                    }
+                });
+
+                document.addEventListener('mousemove', (event) => {
+                    if (isMouseLocked) {
+                        const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+                        const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+                        const yawSpeed = 0.002;
+                        const pitchSpeed = 0.002;
+
+                        // Mouse X movement rotates playerGroup around Y-axis (player body rotation)
+                        if (playerGroup) {
+                            playerGroup.rotation.y -= movementX * yawSpeed;
+                        }
+
+                        // Mouse Y movement rotates camera around X-axis (up/down view)
+                        if (camera) {
+                            camera.rotation.x -= movementY * pitchSpeed;
+
+                            // Limit camera pitch (-90 to +90 degrees)
+                            camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+                        }
+                    }
+                });
+            } else {
+                // Mobile Controls Event Listeners
+                leftJoystick.element = document.getElementById('leftJoystick');
+                leftJoystick.knob = leftJoystick.element.querySelector('div');
+                rightJoystick.element = document.getElementById('rightJoystick');
+                rightJoystick.knob = rightJoystick.element.querySelector('div');
+
+                const jumpButton = document.getElementById('jumpButton');
+                const runButton = document.getElementById('runButton');
+                const scopeButton = document.getElementById('scopeButton');
+                const fireButton = document.getElementById('fireButton');
+                const reloadButton = document.getElementById('reloadButton');
+
+                // Helper to get touch coordinates relative to an element
+                function getTouchPos(event, element) {
+                    const rect = element.getBoundingClientRect();
+                    const touch = event.changedTouches[0];
+                    return {
+                        x: touch.clientX - rect.left,
+                        y: touch.clientY - rect.top
+                    };
+                }
+
+                // Left Joystick (Movement)
+                leftJoystick.element.addEventListener('touchstart', (e) => {
+                    e.preventDefault(); // Prevent scrolling/zoom
+                    leftJoystick.active = true;
+                    const pos = getTouchPos(e, leftJoystick.element);
+                    leftJoystick.startX = pos.x;
+                    leftJoystick.startY = pos.y;
+                    leftJoystick.knob.style.transform = `translate(-50%, -50%) translate(${pos.x - leftJoystick.element.offsetWidth / 2}px, ${pos.y - leftJoystick.element.offsetHeight / 2}px)`;
+                });
+
+                leftJoystick.element.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    if (leftJoystick.active) {
+                        const pos = getTouchPos(e, leftJoystick.element);
+                        leftJoystick.currentX = pos.x;
+                        leftJoystick.currentY = pos.y;
+
+                        let deltaX = leftJoystick.currentX - leftJoystick.startX;
+                        let deltaY = leftJoystick.currentY - leftJoystick.startY;
+
+                        // Clamp knob movement within joystick bounds
+                        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                        if (distance > joystickMaxDistance) {
+                            deltaX = (deltaX / distance) * joystickMaxDistance;
+                            deltaY = (deltaY / distance) * joystickMaxDistance;
+                        }
+
+                        leftJoystick.knob.style.transform = `translate(-50%, -50%) translate(${leftJoystick.startX - leftJoystick.element.offsetWidth / 2 + deltaX}px, ${leftJoystick.startY - leftJoystick.element.offsetHeight / 2 + deltaY}px)`;
+                        
+                        // Update movement vector for game logic
+                        if (distance > joystickDeadZone) {
+                            touchMoveVector.set(deltaX, 0, -deltaY).normalize(); // X for strafe, Z for forward/backward
+                        } else {
+                            touchMoveVector.set(0, 0, 0);
+                        }
+                    }
+                });
+
+                leftJoystick.element.addEventListener('touchend', () => {
+                    leftJoystick.active = false;
+                    leftJoystick.knob.style.transform = `translate(-50%, -50%) translate(0, 0)`; // Reset knob to center
+                    touchMoveVector.set(0, 0, 0); // Stop movement
+                });
+
+                // Right Joystick (Look)
+                rightJoystick.element.addEventListener('touchstart', async (e) => {
+                    e.preventDefault();
+                    rightJoystick.active = true;
+                    const pos = getTouchPos(e, rightJoystick.element);
+                    rightJoystick.startX = pos.x;
+                    rightJoystick.startY = pos.y;
+                    rightJoystick.knob.style.transform = `translate(-50%, -50%) translate(${pos.x - rightJoystick.element.offsetWidth / 2}px, ${pos.y - rightJoystick.element.offsetHeight / 2}px)`;
+
+                    // Start Tone.js audio context (requires user gesture)
+                    if (Tone.context.state !== 'running') {
+                        await Tone.start();
+                        console.log("AudioContext started by user interaction.");
+                    }
+                });
+
+                rightJoystick.element.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    if (rightJoystick.active) {
+                        const pos = getTouchPos(e, rightJoystick.element);
+                        rightJoystick.currentX = pos.x;
+                        rightJoystick.currentY = pos.y;
+
+                        let deltaX = rightJoystick.currentX - rightJoystick.startX;
+                        let deltaY = rightJoystick.currentY - rightJoystick.startY;
+
+                        // Clamp knob movement within joystick bounds
+                        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                        if (distance > joystickMaxDistance) {
+                            deltaX = (deltaX / distance) * joystickMaxDistance;
+                            deltaY = (deltaY / distance) * joystickMaxDistance;
+                        }
+
+                        rightJoystick.knob.style.transform = `translate(-50%, -50%) translate(${rightJoystick.startX - rightJoystick.element.offsetWidth / 2 + deltaX}px, ${rightJoystick.startY - rightJoystick.element.offsetHeight / 2 + deltaY}px)`;
+                        
+                        // Update look vector for camera rotation
+                        touchLookVector.set(deltaX, deltaY);
+                    }
+                });
+
+                rightJoystick.element.addEventListener('touchend', () => {
+                    rightJoystick.active = false;
+                    rightJoystick.knob.style.transform = `translate(-50%, -50%) translate(0, 0)`; // Reset knob to center
+                    touchLookVector.set(0, 0); // Stop looking
+                });
+
+                // Mobile Buttons
+                jumpButton.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if (canJump) {
+                        playerBody.velocity.y = 5; // Jump strength
+                        canJump = false;
+                    }
+                });
+
+                runButton.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    isSprinting = true;
+                });
+                runButton.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    isSprinting = false;
+                });
+
+                scopeButton.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    isScoping = true;
+                    toggleScopeUI(true);
+                });
+                scopeButton.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    isScoping = false;
+                    toggleScopeUI(false);
+                });
+
+                fireButton.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    shootBullet();
+                });
+
+                reloadButton.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    startReload();
+                });
+            }
+        }
+
+        // Game update loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000; // Delta time in seconds
+            prevTime = time;
+
+            // Update physics world
+            world.step(1 / 60, delta, 10); // Increased max sub-steps
+
+            // ----------- Deferred Removal Logic -----------
+            // Process bodies and meshes to remove this frame (now only enemies)
+            bodiesToRemove.forEach(body => {
+                if (world.bodies.includes(body)) {
+                    world.removeBody(body);
+                }
+            });
+            meshesToRemove.forEach(mesh => {
+                if (mesh.parent) { 
+                    scene.remove(mesh);
+                }
+            });
+            // Clear removal lists
+            bodiesToRemove = [];
+            meshesToRemove = [];
+            // ---------------------------------------------
+
+            // Jump availability logic (can jump only when player Y position is close to playerRadius)
+            canJump = (Math.abs(playerBody.position.y - playerRadius) < 0.01); 
+
+            // Player movement
+            const currentMoveSpeed = isSprinting ? sprintSpeed : walkSpeed; // Apply sprint speed
+            const inputVector = new THREE.Vector3(); // User input vector (x: left/right, y: up/down, z: forward/backward)
+
+            if (isMobile) {
+                // Use mobile joystick input
+                inputVector.copy(touchMoveVector);
+            } else {
+                // Use keyboard input
+                // W and S key function changed
+                if (keyboard['KeyS']) { inputVector.z -= 1; } // S now moves forward
+                if (keyboard['KeyW']) { inputVector.z += 1; } // W now moves backward
+                if (keyboard['KeyA']) { inputVector.x -= 1; } // A is left
+                if (keyboard['KeyD']) { inputVector.x += 1; } // D is right
+            }
+
+            if (inputVector.lengthSq() > 0) { // If there is movement input
+                inputVector.normalize(); // Normalize input vector
+
+                // Calculate movement vector based on playerGroup's current direction
+                const playerForward = new THREE.Vector3();
+                if (playerGroup) {
+                    playerGroup.getWorldDirection(playerForward); // Get playerGroup's forward direction
+                    playerForward.y = 0; // Only consider horizontal movement (Y-axis does not move)
+                    playerForward.normalize();
+                } else {
+                    playerForward.set(0, 0, -1);
+                }
+
+                // Calculate player's right direction vector
+                const playerRight = new THREE.Vector3();
+                playerRight.crossVectors(new THREE.Vector3(0, 1, 0), playerForward).normalize();
+
+                const finalMove = new THREE.Vector3();
+                finalMove.addScaledVector(playerForward, -inputVector.z); // If inputVector.z is -1 (S key), move forward; if +1 (W key), move backward
+                finalMove.addScaledVector(playerRight, inputVector.x); // Left/right movement
+                finalMove.normalize(); // Normalize final movement vector
+
+                // 현재 플레이어의 물리 속도 업데이트
+                if (playerBody) {
+                    playerBody.velocity.x = finalMove.x * currentMoveSpeed; // Apply speed
+                    playerBody.velocity.z = finalMove.z * currentMoveSpeed; // Apply speed
+                }
+            } else {
+                // If no movement input, gradually reduce horizontal velocity to 0 (prevent sliding)
+                if (playerBody) {
+                    playerBody.velocity.x *= 0.9;
+                    playerBody.velocity.z *= 0.9;
+                }
+            }
+
+            // Mobile camera look control
+            if (isMobile && touchLookVector.lengthSq() > 0) {
+                const yawSpeed = 0.005; // Adjusted for touch sensitivity
+                const pitchSpeed = 0.005; // Adjusted for touch sensitivity
+
+                if (playerGroup) {
+                    playerGroup.rotation.y -= touchLookVector.x * yawSpeed;
+                }
+
+                if (camera) {
+                    camera.rotation.x -= touchLookVector.y * pitchSpeed;
+                    camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+                }
+            }
+
+            // Sync player mesh position with physics body
+            if (playerMesh && playerBody) {
+                playerMesh.position.copy(playerBody.position);
+            }
+
+            // Sync playerGroup position with physics body (camera, being a child of this group, also updates its position)
+            if (playerGroup && playerBody) {
+                playerGroup.position.copy(playerBody.position);
+            }
+
+            // Update enemy AI and sync mesh positions
+            enemies.forEach(enemy => {
+                const now = performance.now();
+
+                // Enemy movement AI
+                if (now - enemy.lastMoveChangeTime > enemyMoveChangeInterval) {
+                    enemy.randomMoveDirection.set((Math.random() * 2 - 1), 0, (Math.random() * 2 - 1)).normalize();
+                    enemy.lastMoveChangeTime = now;
+                }
+                enemy.body.velocity.x = enemy.randomMoveDirection.x * enemyMoveSpeed;
+                enemy.body.velocity.z = enemy.randomMoveDirection.z * enemyMoveSpeed;
+
+                // Enemy jump AI
+                const enemyGroundY = enemy.cannonBodyShape.radius; // Radius of enemy body sphere
+                const isEnemyOnGround = (Math.abs(enemy.body.position.y - enemyGroundY) < 0.1); 
+
+                if (isEnemyOnGround) {
+                    enemy.canEnemyJump = true; // Reset jump possibility when on ground
+                }
+
+                // If jump cooldown passed, on ground, and 10% chance, jump
+                if (enemy.canEnemyJump && (now - enemy.lastEnemyJumpTime > enemyJumpCooldown) && Math.random() < 0.1) {
+                    enemy.body.velocity.y = enemyJumpStrength;
+                    enemy.canEnemyJump = false; // Disable jump after jumping
+                    enemy.lastEnemyJumpTime = now;
+                }
+
+                enemy.meshGroup.position.copy(enemy.body.position);
+                enemy.meshGroup.quaternion.copy(enemy.body.quaternion);
+            });
+
+            // Enemy indicator UI update
+            if (enemies.length > 0) {
+                const enemyBody = enemies[0].body;
+                const playerPos = playerBody.position;
+                const enemyPos = enemyBody.position;
+
+                // Check if enemy is on screen (Camera Frustum check)
+                const frustum = new THREE.Frustum();
+                const matrix = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+                frustum.setFromProjectionMatrix(matrix);
+
+                const enemySphere = new THREE.Sphere(new THREE.Vector3(enemyPos.x, enemyPos.y, enemyPos.z), enemyBody.shapes[0].radius); // Enemy body's first shape radius for bounds check
+                
+                if (frustum.intersectsSphere(enemySphere)) {
+                    enemyIndicator.style.display = 'none'; // Hide if on screen
+                } else {
+                    enemyIndicator.style.display = 'block'; // Show if off screen
+
+                    // Player-enemy vector (horizontal only)
+                    const vecToEnemy = new THREE.Vector3(enemyPos.x - playerPos.x, 0, enemyPos.z - playerPos.z);
+                    vecToEnemy.normalize();
+
+                    // Camera's current forward direction (horizontal only)
+                    const cameraForward = new THREE.Vector3();
+                    camera.getWorldDirection(cameraForward);
+                    cameraForward.y = 0;
+                    cameraForward.normalize();
+
+                    // Calculate horizontal angle between camera forward and enemy direction vectors
+                    // Math.atan2(A.x * B.z - A.z * B.x, A.x * B.x + A.z * B.z) = signed angle from A to B
+                    const angleRad = Math.atan2(
+                        cameraForward.x * vecToEnemy.z - cameraForward.z * vecToEnemy.x,
+                        cameraForward.dot(vecToEnemy)
+                    );
+
+                    // Indicator position on the edge of the screen
+                    const screenWidth = window.innerWidth;
+                    const screenHeight = window.innerHeight;
+                    const borderOffset = 50; // Distance from screen edge
+
+                    const edgeRadius = Math.min(screenWidth, screenHeight) / 2 - borderOffset;
+
+                    // Calculate X, Y coordinates relative to canvas center
+                    const indicatorX = screenWidth / 2 + edgeRadius * Math.sin(angleRad);
+                    const indicatorY = screenHeight / 2 - edgeRadius * Math.cos(angleRad); // -cos because Y-axis increases downwards on screen
+
+                    enemyIndicator.style.left = `${indicatorX}px`;
+                    enemyIndicator.style.top = `${indicatorY}px`;
+                    // Circular UI does not need to rotate, always faces center (not an arrow shape)
+                    enemyIndicator.style.transform = `translate(-50%, -50%)`; 
+                }
+            } else {
+                enemyIndicator.style.display = 'none'; // Hide if no enemies
+            }
+
+
+            // Render
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+
+        // Initialize and start game after all resources are loaded
+        window.onload = function() {
+            init();
+            animate();
+        };
+
+        // Error handling
+        window.addEventListener('error', (event) => {
+            console.error("전역 오류 발생:", event.error);
+            showMessage(`오류 발생: ${event.message}`, 7000);
+        });
+
+        // Unhandled Promise rejection error handling
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error("처리되지 않은 Promise reject:", event.reason);
+            showMessage(`처리되지 않은 오류: ${event.reason.message || event.reason}`, 7000);
+        });
+    </script>
+</body>
+</html>
