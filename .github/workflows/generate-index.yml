@@ -1,0 +1,39 @@
+name: Generate index.html for HTML pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  generate-index:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Create scripts dir (if missing)
+        run: mkdir -p scripts
+
+      - name: Run index generator
+        env:
+          TARGET_DIR: docs    # 변경: 'docs' 대신 '.' 로 하면 루트에 index.html 생성
+        run: |
+          node scripts/generate-index.js
+
+      - name: Commit & push generated index.html (if changed)
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: github-actions
+          author_email: actions@github.com
+          message: "chore: update generated index.html"
+          add: 'docs/index.html'  # TARGET_DIR 을 바꾸면 이 경로도 바꿔주세요
