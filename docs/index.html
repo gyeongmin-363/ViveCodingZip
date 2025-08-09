@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HTML 페이지 목록</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#06b6d4;--muted:#9ca3af}
+    html,body{height:100%}
+    body{
+      margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background:linear-gradient(180deg,#071024 0%, #071a2a 100%);color:#e6eef6;
+      display:flex;align-items:flex-start;justify-content:center;padding:48px 20px;
+    }
+    .wrap{max-width:1000px;width:100%}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:20px}
+    h1{margin:0;font-size:20px}
+    p.lead{margin:0;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:18px}
+    a.card{
+      display:block;padding:14px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));
+      text-decoration:none;color:inherit;box-shadow:0 6px 18px rgba(2,6,23,0.6);transition:transform .14s, box-shadow .14s;
+      border:1px solid rgba(255,255,255,0.03);
+    }
+    a.card:hover{transform:translateY(-6px);box-shadow:0 20px 40px rgba(2,6,23,0.6)}
+    .title{font-weight:600;margin-bottom:6px}
+    .meta{font-size:13px;color:var(--muted)}
+    .search{margin-left:auto}
+    input[type="search"]{
+      appearance:none;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);
+      background:rgba(255,255,255,0.02);color:inherit;outline:none;width:220px
+    }
+    footer{margin-top:28px;color:var(--muted);font-size:13px}
+    .empty{padding:28px;border-radius:12px;background:rgba(255,255,255,0.02);text-align:center;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>HTML 페이지 목록</h1>
+        <p class="lead">이 폴더(docs)의 HTML 파일을 자동으로 나열합니다.</p>
+      </div>
+      <div class="search" style="margin-left:auto">
+        <input id="q" type="search" placeholder="검색 (파일명 또는 제목)">
+      </div>
+    </header>
+
+    <main>
+      <div id="grid" class="grid">
+        
+          <a class="card" href="./3Dfps.html" title="3D FPS">
+            <div class="title">3D FPS</div>
+            <div class="meta">3Dfps.html</div>
+          </a>
+        
+      </div>
+
+      
+    </main>
+
+    <footer>
+      자동 생성된 페이지 — 생성 시간: 8/9/2025, 7:31:33 AM
+    </footer>
+  </div>
+
+  <script>
+    const items = Array.from(document.querySelectorAll('.card'));
+    const q = document.getElementById('q');
+    function normalize(s){ return s.trim().toLowerCase(); }
+    q.addEventListener('input', () => {
+      const v = normalize(q.value);
+      items.forEach(card => {
+        const t = normalize(card.querySelector('.title').textContent + ' ' + card.querySelector('.meta').textContent);
+        card.style.display = t.includes(v) ? 'block' : 'none';
+      });
+    });
+  </script>
+</body>
+</html>
