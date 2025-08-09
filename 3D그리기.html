@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pinch 3D Draw — 오른손 그리기 / 왼손 회전 (MediaPipe + Three.js)</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel: rgba(255,255,255,0.03);
+      --accent:#06b6d4;
+      --muted:#9aa6b2;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter,Segoe UI,Arial;}
+    /* 전체 레이아웃: 3D 캔버스가 배경, 작은 웹캠은 왼쪽 상단에 고정, 우측 하단에 컨트롤 */
+    #threeContainer {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+    }
+    canvas#threeCanvas { display:block; width:100%; height:100%; }
+
+    /* 작은 웹캠 (왼쪽 위) */
+    .webcamBox {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      width: 240px;
+      height: 180px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(255,255,255,0.06);
+      z-index: 2000;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    }
+    .webcamBox video{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      transform: scaleX(-1); /* 미러링: 사용자에게 자연스럽게 보이게 */
+    }
+    .webcamOverlay{
+      position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none;
+    }
+
+    /* 컨트롤 패널 */
+    .uiPanel {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      width:320px;
+      background: var(--panel);
+      border-radius:12px;
+      padding:12px;
+      z-index: 2000;
+      color: var(--muted);
+      box-shadow: 0 10px 30px rgba(2,6,23,0.6);
+      font-size:13px;
+    }
+    .uiPanel h4{ margin:0 0 8px 0; color:#fff; font-size:15px; }
+    .row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+    .btn{
+      flex:0 0 auto;
+      padding:8px 10px;
+      border-radius:8px;
+      background:transparent;
+      border:1px solid rgba(255,255,255,0.06);
+      color:#fff; cursor:pointer;
+    }
+    label.span { color:var(--muted); font-size:13px; }
+    input[type=range]{ width:100%; }
+    .status { color:#cfeefe; font-weight:600; font-size:13px; }
+
+    footer {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      color: var(--muted);
+      font-size:12px;
+      z-index: 2000;
+    }
+
+    @media (max-width:700px){
+      .webcamBox{ width:180px; height:135px; }
+      .uiPanel{ width:92%; left:4%; right:4%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="threeContainer">
+    <canvas id="threeCanvas"></canvas>
+  </div>
+
+  <div class="webcamBox" id="webcamBox">
+    <video id="input_video" autoplay playsinline muted></video>
+    <canvas id="webcamOverlay" class="webcamOverlay"></canvas>
+  </div>
+
+  <div class="uiPanel" id="uiPanel">
+    <h4>Pinch 3D Draw</h4>
+    <div class="row">
+      <div class="status" id="modeStatus">초기화 중...</div>
+    </div>
+
+    <div class="row">
+      <button id="undoBtn" class="btn">이전 선 취소(Undo)</button>
+      <button id="clearBtn" class="btn">전체 지우기</button>
+      <button id="downloadBtn" class="btn">이미지 저장</button>
+    </div>
+
+    <div style="margin-top:6px">
+      <div style="display:flex;justify-content:space-between"><label class="span">브러시 크기</label><span id="sizeLabel" class="span">3</span></div>
+      <input id="sizeRange" type="range" min="1" max="12" value="3" />
+    </div>
+
+    <div style="margin-top:8px">
+      <div style="display:flex;justify-content:space-between"><label class="span">브러시 색상</label></div>
+      <input id="colorPicker" type="color" value="#111122" style="width:100%; height:34px; border-radius:6px; border:0; padding:0;" />
+    </div>
+
+    <div style="margin-top:8px; color:var(--muted); font-size:12px">
+      오른손: 검지+엄지 핀치 → 그리기<br>
+      왼손: 검지+엄지 핀치 → 장면 회전 (좌/우/상하)
+    </div>
+  </div>
+
+  <footer>
+    MediaPipe Hands + Three.js 예제 — HTTPS 또는 localhost에서 실행하세요.
+  </footer>
+
+  <!-- MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <!-- Three.js (non-module UMD build) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+
+  <script>
+  (function(){
+    // ============ 전역 설정 =============
+    const videoEl = document.getElementById('input_video');
+    const webcamOverlay = document.getElementById('webcamOverlay');
+    const overlayCtx = webcamOverlay.getContext('2d', { willReadFrequently: true });
+
+    const threeCanvas = document.getElementById('threeCanvas');
+    const undoBtn = document.getElementById('undoBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const sizeRange = document.getElementById('sizeRange');
+    const sizeLabel = document.getElementById('sizeLabel');
+    const colorPicker = document.getElementById('colorPicker');
+    const modeStatus = document.getElementById('modeStatus');
+
+    let renderer, scene, camera, ambientLight, dirLight;
+    let strokes = []; // {mesh, points, color, radius}
+    let currentStroke = null;
+    let rightIsPinching = false;
+    let leftIsPinching = false;
+    let lastRightPoint = null;
+    let lastLeftNorm = null; // normalized [x,y] for rotation delta
+    const pinchThreshold = 0.05; // 정규화 거리 기준, 필요시 조정
+    const addPointMinDist = 0.015; // 점 추가 최소 이동거리 (normalized)
+    const worldScaleX = 22; // 화면 x 축 크기
+    const worldScaleY = 14; // 화면 y 축 크기
+    const depthScale = 40;   // z 깊이 스케일
+    const rotateSpeed = 6.0; // 왼손 이동 -> 회전 속도 조정
+
+    // 초기 UI값 반영
+    sizeLabel.textContent = sizeRange.value;
+
+    // ============ Three.js 초기화 ============
+    function initThree(){
+      renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true, alpha: false });
+      renderer.setPixelRatio(window.devicePixelRatio || 1);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0b1220);
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 0, 30);
+
+      ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+      scene.add(ambientLight);
+      dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+      dirLight.position.set(5,10,7);
+      scene.add(dirLight);
+
+      // 가이드 그리드 (옵션)
+      const grid = new THREE.GridHelper(60, 60, 0x222233, 0x111122);
+      grid.position.y = -10;
+      scene.add(grid);
+
+      window.addEventListener('resize', onResize);
+    }
+
+    function onResize(){
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+
+      // 웹캠 오버레이 크기 재설정 (미니뷰)
+      const box = document.getElementById('webcamBox');
+      const rect = box.getBoundingClientRect();
+      webcamOverlay.width = rect.width;
+      webcamOverlay.height = rect.height;
+    }
+
+    // ========= 스트로크 생성/갱신 헬퍼 ===========
+    function buildStrokeMesh(points, radius, colorHex){
+      if(points.length === 0) return null;
+      // 포인트가 1개면 작은 구체로 처리
+      if(points.length === 1){
+        const g = new THREE.SphereGeometry(Math.max(0.01, radius*0.02), 8, 8);
+        const m = new THREE.MeshStandardMaterial({ color: colorHex, metalness:0.2, roughness:0.6 });
+        const mesh = new THREE.Mesh(g, m);
+        mesh.position.copy(points[0]);
+        return mesh;
+      }
+
+      // TubeGeometry 사용 가능하면 튜브로, 아니면 라인으로 대체
+      if(typeof THREE.TubeGeometry !== 'undefined'){
+        const curve = new THREE.CatmullRomCurve3(points);
+        const segments = Math.max(8, points.length * 4);
+        const geom = new THREE.TubeGeometry(curve, segments, radius, 8, false);
+        const mat = new THREE.MeshStandardMaterial({ color: colorHex, metalness:0.2, roughness:0.5 });
+        const mesh = new THREE.Mesh(geom, mat);
+        return mesh;
+      } else {
+        // 폴리라인 (fallback)
+        const pos = new Float32Array(points.length * 3);
+        for(let i=0;i<points.length;i++){
+          pos[i*3] = points[i].x;
+          pos[i*3+1] = points[i].y;
+          pos[i*3+2] = points[i].z;
+        }
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.LineBasicMaterial({ color: colorHex, linewidth: radius });
+        return new THREE.Line(geom, mat);
+      }
+    }
+
+    function startNewStroke(startPointVec3){
+      const color = new THREE.Color(colorPicker.value);
+      const radius = parseFloat(sizeRange.value) * 0.08; // 화면 스케일에 맞춘 반지름
+      currentStroke = {
+        points: [startPointVec3.clone()],
+        color: color,
+        radius: radius,
+        mesh: null
+      };
+    }
+
+    function addPointToStroke(ptVec3){
+      if(!currentStroke) return;
+      const pts = currentStroke.points;
+      const last = pts[pts.length-1];
+      if(last.distanceTo(ptVec3) < 0.0001) return;
+      pts.push(ptVec3.clone());
+      // 리빌드: 이전 mesh 제거 후 새로운 mesh 생성
+      if(currentStroke.mesh){
+        scene.remove(currentStroke.mesh);
+        currentStroke.mesh.geometry && currentStroke.mesh.geometry.dispose && currentStroke.mesh.geometry.dispose();
+        currentStroke.mesh.material && currentStroke.mesh.material.dispose && currentStroke.mesh.material.dispose();
+      }
+      const mesh = buildStrokeMesh(currentStroke.points, currentStroke.radius, currentStroke.color);
+      if(mesh) {
+        scene.add(mesh);
+        currentStroke.mesh = mesh;
+      }
+    }
+
+    function finishStroke(){
+      if(!currentStroke) return;
+      // 이미 scene에 추가되어 있음
+      strokes.push(currentStroke);
+      currentStroke = null;
+    }
+
+    function undoStroke(){
+      if(currentStroke){
+        // 취소 중이라면 현재 그리는 스트로크를 제거
+        if(currentStroke.mesh) {
+          scene.remove(currentStroke.mesh);
+        }
+        currentStroke = null;
+        return;
+      }
+      const s = strokes.pop();
+      if(s && s.mesh) {
+        scene.remove(s.mesh);
+      }
+    }
+
+    function clearAllStrokes(){
+      if(currentStroke && currentStroke.mesh){
+        scene.remove(currentStroke.mesh);
+        currentStroke = null;
+      }
+      while(strokes.length){
+        const s = strokes.pop();
+        if(s.mesh) scene.remove(s.mesh);
+      }
+    }
+
+    // ============ 좌표 매핑 ============
+    // MediaPipe landmarks: normalized x(0..1 left->right), y(0..1 top->bottom), z(relative, negative toward camera)
+    // 우리가 보여주는 비디오는 미러(수평반전)되어 있으므로 화면 움직임과 일치시키려면 x를 반전(1-x)해서 사용함
+    function landmarkToWorldVec3(landmark){
+      const mx = 1.0 - landmark.x; // mirror 보정
+      const my = landmark.y;
+      const mz = -landmark.z; // MediaPipe z: 음수일수록 카메라 쪽으로(가까움) => 양수로 바꿔서 앞쪽으로 증가시키자
+      const x = (mx - 0.5) * worldScaleX;
+      const y = (0.5 - my) * worldScaleY;
+      const z = mz * depthScale;
+      return new THREE.Vector3(x, y, z);
+    }
+
+    // ============ MediaPipe Hands 설정 ============
+    const hands = new Hands({
+      locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+      }
+    });
+
+    hands.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.6
+    });
+
+    hands.onResults(onHandsResults);
+
+    // Camera util
+    let cameraUtils = null;
+    async function startCamera(){
+      try{
+        cameraUtils = new Camera(videoEl, {
+          onFrame: async () => {
+            await hands.send({image: videoEl});
+          },
+          width: 1280,
+          height: 720
+        });
+        await cameraUtils.start();
+
+        modeStatus.textContent = '카메라 연결됨 — 손을 화면에 넣어주세요';
+        onResize(); // overlay 크기 맞춤
+      }catch(e){
+        console.error('카메라 시작 오류', e);
+        modeStatus.textContent = '카메라 접근 실패 — 권한/HTTPS 확인';
+      }
+    }
+
+    // ============ 결과 처리 (핵심) ============
+    function onHandsResults(results){
+      // 웹캠 오버레이(미니뷰) 랜드마크 그리기
+      overlayCtx.clearRect(0,0,webcamOverlay.width,webcamOverlay.height);
+      overlayCtx.lineWidth = 2;
+      overlayCtx.strokeStyle = 'rgba(255,255,255,0.12)';
+
+      let anyHand = false;
+      rightIsPinching = false;
+      leftIsPinching = false;
+
+      if(!results.multiHandLandmarks || results.multiHandLandmarks.length === 0){
+        modeStatus.textContent = '손을 찾지 못했습니다.';
+        // 핀치 끝났으면 스트로크 종료
+        if(currentStroke) finishStroke();
+        lastRightPoint = null;
+        lastLeftNorm = null;
+        return;
+      }
+
+      // loop hands
+      for(let i=0;i<results.multiHandLandmarks.length;i++){
+        anyHand = true;
+        const landmarks = results.multiHandLandmarks[i];
+        const handednessObj = results.multiHandedness && results.multiHandedness[i];
+        const label = (handednessObj && handednessObj.label) ? handednessObj.label : 'Right'; // "Left" or "Right"
+
+        // draw small markers on mini overlay
+        const w = webcamOverlay.width, h = webcamOverlay.height;
+        // draw landmarks
+        overlayCtx.fillStyle = label === 'Right' ? 'rgba(6,182,212,0.9)' : 'rgba(249,115,22,0.9)';
+        for(let k=0;k<landmarks.length;k++){
+          const lx = (1 - landmarks[k].x) * w; // mirror 보정
+          const ly = landmarks[k].y * h;
+          overlayCtx.beginPath();
+          overlayCtx.arc(lx, ly, 3, 0, Math.PI*2);
+          overlayCtx.fill();
+        }
+
+        // 핀치 감지 (검지 끝 8, 엄지 끝 4)
+        const idx = landmarks[8];
+        const thumb = landmarks[4];
+        const dx = idx.x - thumb.x;
+        const dy = idx.y - thumb.y;
+        const dz = idx.z - thumb.z;
+        const normDist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+        const pinch = normDist < pinchThreshold;
+
+        if(label === 'Right' && pinch){
+          // 오른손 그리기 (왼손 인터랙션이 우선시 되지 않았다면)
+          rightIsPinching = true;
+        }
+        if(label === 'Left' && pinch){
+          leftIsPinching = true;
+        }
+      }
+
+      // 우선순위: 왼손 핀치가 있으면 회전 모드 우선, 아니면 오른손 그리기
+      if(leftIsPinching){
+        modeStatus.textContent = '왼손 핀치: 회전 모드';
+      } else if(rightIsPinching){
+        modeStatus.textContent = '오른손 핀치: 그리기 모드';
+      } else {
+        modeStatus.textContent = '일반 모드';
+      }
+
+      // 두 손을 모두 순회하면서 각각 동작 수행
+      for(let i=0;i<results.multiHandLandmarks.length;i++){
+        const landmarks = results.multiHandLandmarks[i];
+        const handednessObj = results.multiHandedness && results.multiHandedness[i];
+        const label = (handednessObj && handednessObj.label) ? handednessObj.label : 'Right';
+
+        const idx = landmarks[8];
+        const thumb = landmarks[4];
+        const dx = idx.x - thumb.x;
+        const dy = idx.y - thumb.y;
+        const dz = idx.z - thumb.z;
+        const normDist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        const pinch = normDist < pinchThreshold;
+
+        if(label === 'Left'){
+          // 왼손: 회전 제어 (핀치 중일 때)
+          if(pinch){
+            const currNorm = { x: idx.x, y: idx.y };
+            if(lastLeftNorm){
+              // delta in normalized coords
+              const ddx = currNorm.x - lastLeftNorm.x;
+              const ddy = currNorm.y - lastLeftNorm.y;
+              // 화면의 움직임과 일치하도록 x 좌표 반전(미러 보정)
+              const dxMirrored = -ddx; // because we mirror video for UX
+              // 회전 적용 (scene 회전)
+              scene.rotation.y += dxMirrored * rotateSpeed; // 좌우 회전
+              scene.rotation.x += ddy * rotateSpeed; // 상하 회전
+            }
+            lastLeftNorm = currNorm;
+          } else {
+            lastLeftNorm = null;
+          }
+        }
+
+        if(label === 'Right'){
+          // 오른손: 그리기
+          if(pinch && !leftIsPinching){ // 왼손 회전이 우선이므로 왼손 핀치가 있으면 오른손 그리기 억제
+            // compute distance from lastRightPoint (in normalized screen space)
+            const normalizedPoint = { x: idx.x, y: idx.y, z: idx.z };
+            if(!lastRightPoint || Math.hypot(normalizedPoint.x - lastRightPoint.x, normalizedPoint.y - lastRightPoint.y) > addPointMinDist){
+              // map to world coords
+              const worldVec = landmarkToWorldVec3(normalizedPoint);
+              if(!currentStroke){
+                startNewStroke(worldVec);
+              }
+              addPointToStroke(worldVec);
+              lastRightPoint = normalizedPoint;
+            }
+          } else {
+            // 핀치 해제 => 스트로크 마무리
+            if(currentStroke){
+              finishStroke();
+            }
+            lastRightPoint = null;
+          }
+        }
+      } // end for each hand
+    } // end onHandsResults
+
+    // ============= 애니메이션 루프 ============
+    function animate(){
+      requestAnimationFrame(animate);
+      // 약간의 감쇠(부드러운 회전) 등 보간을 넣고 싶으면 여기서 처리
+      renderer.render(scene, camera);
+    }
+
+    // ============= UI 핸들러 ============
+    undoBtn.addEventListener('click', ()=> {
+      undoStroke();
+    });
+    clearBtn.addEventListener('click', ()=> {
+      clearAllStrokes();
+    });
+    sizeRange.addEventListener('input', ()=> {
+      sizeLabel.textContent = sizeRange.value;
+    });
+    downloadBtn.addEventListener('click', ()=> {
+      // Three.js 캔버스 이미지를 PNG로 다운로드 (배경 포함)
+      const dataURL = renderer.domElement.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataURL;
+      a.download = 'pinch3d_draw.png';
+      a.click();
+    });
+
+    // ============= 초기화 실행 ============
+    initThree();
+    animate();
+    startCamera();
+
+    // overlay 초기 사이즈 맞춤 (로딩 시)
+    window.addEventListener('load', () => {
+      setTimeout(onResize, 150);
+    });
+
+    // 안전 종료(페이지 닫을 때 카메라 정리)
+    window.addEventListener('beforeunload', ()=> {
+      try{ cameraUtils && cameraUtils.stop && cameraUtils.stop(); }catch(e){}
+    });
+
+  })();
+  </script>
+</body>
+</html>
