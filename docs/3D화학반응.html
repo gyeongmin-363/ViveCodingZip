@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>3D 화학 반응 시뮬레이터 — 수정본 (OrbitControls 오류 수정)</title>
+  <style>
+    :root{--sidebar:320px}
+    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,'Noto Sans KR',sans-serif}
+    .app{display:flex;height:100vh;gap:12px}
+    .panel{width:var(--sidebar);padding:16px;box-sizing:border-box;background:#0f1724;color:#e6eef8;overflow:auto}
+    h1{font-size:18px;margin:0 0 12px 0}
+    label{display:flex;align-items:center;gap:8px;margin:6px 0}
+    .controls{margin-top:12px}
+    .btn{padding:8px 12px;border-radius:8px;border:0;background:#2563eb;color:white;cursor:pointer;margin-right:8px}
+    .btn.secondary{background:#64748b}
+    .small{font-size:13px}
+    input[type=number]{width:64px}
+    .canvas-wrap{flex:1;position:relative;background:#061225}
+    canvas{display:block;width:100%;height:100%}
+    .overlay{position:absolute;left:12px;top:12px;background:rgba(0,0,0,0.35);padding:8px;border-radius:8px;color:#fff}
+    .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    .legend .item{display:flex;align-items:center;gap:6px}
+    .log{height:140px;overflow:auto;background:#031425;padding:8px;border-radius:6px;margin-top:8px;font-size:13px}
+    footer{margin-top:12px;font-size:12px;color:#9aa8bf}
+    .error{color:#ffb4b4;background:#3a0f0f;padding:8px;border-radius:6px;margin-top:8px}
+  </style>
+
+  <!--
+    해결 방법 요약 (간단한 한줄):
+    - 이전에는 UMD 스크립트(THREE + controls) 방식을 사용했는데, 일부 환경에서 OrbitControls가 THREE 네임스페이스에 제대로 연결되지 않아 "THREE.OrbitControls is not a constructor" 오류가 발생했습니다.
+    - 이 파일은 import map + ESM 모듈 방식으로 변경하여 OrbitControls 모듈의 `import 'three'` 내부 의존성이 올바르게 해결되도록 했습니다.
+
+    주요 외부 리소스
+    - Three.js ESM 모듈: https://unpkg.com/three@0.152.2/build/three.module.js
+    - OrbitControls (ESM): https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js
+    - import maps 안내: https://developer.mozilla.org/docs/Web/HTML/Element/script/type/importmap
+  -->
+
+  <!-- importmap: 'three'에 대한 모듈 경로를 매핑합니다. 최신 브라우저(크롬, 파이어폭스, 엣지 등)는 지원합니다. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.152.2/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <h1>3D 화학 반응 시뮬레이터</h1>
+      <p class="small">원자/분자들을 선택하고 <strong>Start</strong>를 누르면 입자들이 움직이며 충돌하고 규칙에 따라 반응이 일어납니다.</p>
+
+      <div id="chemical-list"></div>
+
+      <div class="controls">
+        <label>입자수(각 화학물질 당): <input id="countPerType" type="number" value="8" min="1" /></label>
+        <label>반응 속도(시뮬레이션 스텝, 0.5~3): <input id="simSpeed" type="range" min="0.5" max="3" step="0.1" value="1" /></label>
+        <div style="margin-top:8px">
+          <button id="startBtn" class="btn">Start</button>
+          <button id="pauseBtn" class="btn secondary">Pause</button>
+          <button id="resetBtn" class="btn secondary">Reset</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>온도(반응확률): <input id="temperature" type="range" min="0" max="100" step="1" value="50" /></label>
+          <div class="small">온도가 높을수록 반응 확률이 상승합니다.</div>
+        </div>
+
+        <div style="margin-top:12px">
+          <strong>Legend</strong>
+          <div id="legend" class="legend"></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <strong>Reaction log</strong>
+          <div id="log" class="log"></div>
+        </div>
+
+        <div id="lib-error" class="error" style="display:none"></div>
+
+        <footer>간단한 예시 반응 규칙 내장: H2 + O2 → H2O, Na + Cl2 → NaCl, C + O2 → CO2</footer>
+      </div>
+    </aside>
+
+    <main class="canvas-wrap">
+      <div class="overlay" id="status">시작 전</div>
+      <canvas id="c"></canvas>
+    </main>
+  </div>
+
+  <!-- 모듈 스크립트: import map이 정의된 뒤 ESM으로 THREE와 OrbitControls를 불러옵니다 -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js';
+
+    // 간단한 런타임 에러 처리를 위해 try/catch로 감쌉니다.
+    try{
+      // 화학물질 정의 (이름, 색상, 반지름)
+      const CHEMICALS = [
+        { id: 'H2', name: 'H₂ (수소 분자)', color: 0xe6f1ff, radius: 0.25 },
+        { id: 'O2', name: 'O₂ (산소 분자)', color: 0x9ad1ff, radius: 0.35 },
+        { id: 'H2O', name: 'H₂O (물)', color: 0x2ec4b6, radius: 0.45 },
+        { id: 'Na', name: 'Na (나트륨 원자)', color: 0xffc56b, radius: 0.35 },
+        { id: 'Cl2', name: 'Cl₂ (염소 분자)', color: 0x6aff9a, radius: 0.4 },
+        { id: 'NaCl', name: 'NaCl (염화나트륨)', color: 0xff8ba7, radius: 0.45 },
+        { id: 'C', name: 'C (탄소)', color: 0x999999, radius: 0.33 },
+        { id: 'CO2', name: 'CO₂ (이산화탄소)', color: 0xb7d7ff, radius: 0.5 }
+      ];
+
+      // 간단한 반응 규칙: 두 입자의 종류로부터 생성될 제품과 생성 개수
+      const REACTION_RULES = {
+        'H2+O2': { products: [{id:'H2O', count:2}], probBase: 0.9 },
+        'Na+Cl2': { products: [{id:'NaCl', count:2}], probBase: 0.95 },
+        'C+O2': { products: [{id:'CO2', count:1}], probBase: 0.85 }
+      };
+
+      // UI 참조
+      const chemicalListEl = document.getElementById('chemical-list');
+      const legendEl = document.getElementById('legend');
+      const logEl = document.getElementById('log');
+      const statusEl = document.getElementById('status');
+      const startBtn = document.getElementById('startBtn');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const countPerTypeInput = document.getElementById('countPerType');
+      const simSpeedInput = document.getElementById('simSpeed');
+      const tempInput = document.getElementById('temperature');
+      const libError = document.getElementById('lib-error');
+
+      // 체크박스/legend 생성
+      CHEMICALS.forEach(c => {
+        const id = 'chk_' + c.id;
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+          <label><input type="checkbox" id="${id}" checked /> <strong>${c.id}</strong> — <span class="small">${c.name}</span></label>
+        `;
+        chemicalListEl.appendChild(wrapper);
+        const li = document.createElement('div'); li.className='item';
+        li.innerHTML = `<div style="width:14px;height:14px;border-radius:50%;background:#000;box-shadow:0 0 6px rgba(0,0,0,0.6);margin-right:6px" data-color></div><div>${c.id}</div>`;
+        legendEl.appendChild(li);
+      });
+
+      // Three.js 세팅 (ESM 사용)
+      const canvas = document.getElementById('c');
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio || 1);
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x061225);
+
+      const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100);
+      camera.position.set(0, 8, 14);
+
+      // OrbitControls는 ESM으로 import 했으므로 아래처럼 사용합니다.
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(5,10,7);
+      scene.add(light);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+      const BOUNDS = 8;
+      let particles = [];
+      let running = false;
+
+      function rand(min, max){ return Math.random()*(max-min)+min }
+
+      function makeSphere(radius, color){
+        const geo = new THREE.SphereGeometry(radius, 24, 16);
+        const mat = new THREE.MeshStandardMaterial({color});
+        return new THREE.Mesh(geo, mat);
+      }
+
+      function spawnParticle(typeId, position){
+        const def = CHEMICALS.find(c=>c.id===typeId);
+        if(!def) return null;
+        const mesh = makeSphere(def.radius, def.color);
+        mesh.position.copy(position);
+        const particle = {
+          id: typeId,
+          mesh,
+          radius: def.radius,
+          vel: new THREE.Vector3(rand(-1,1), rand(-0.2,0.2), rand(-1,1)).multiplyScalar(0.6),
+          mass: def.radius
+        };
+        scene.add(mesh);
+        particles.push(particle);
+        return particle;
+      }
+
+      function clearParticles(){
+        particles.forEach(p=>scene.remove(p.mesh));
+        particles = [];
+      }
+
+      function createInitialParticles(){
+        clearParticles();
+        const selected = CHEMICALS.filter(c => document.getElementById('chk_'+c.id).checked);
+        const perType = Math.max(1, parseInt(countPerTypeInput.value) || 1);
+        selected.forEach(def => {
+          for(let i=0;i<perType;i++){
+            const pos = new THREE.Vector3(rand(-BOUNDS,BOUNDS), rand(-1,1), rand(-BOUNDS,BOUNDS));
+            spawnParticle(def.id, pos);
+          }
+        });
+        updateLegendColors();
+        log('초기 입자 생성: ' + particles.length + '개');
+      }
+
+      function updateLegendColors(){
+        const items = legendEl.querySelectorAll('.item');
+        items.forEach((it, idx)=>{
+          const color = CHEMICALS[idx].color;
+          const div = it.querySelector('[data-color]');
+          if(div) div.style.background = '#' + color.toString(16).padStart(6,'0');
+        });
+      }
+
+      function log(text){
+        const t = new Date().toLocaleTimeString();
+        logEl.innerHTML = `<div>[${t}] ${text}</div>` + logEl.innerHTML;
+      }
+
+      function reactionBetween(a,b){
+        const key = [a.id,b.id].sort().join('+');
+        return REACTION_RULES[key] || null;
+      }
+
+      // 애니메이션 루프
+      let lastTime = 0;
+      function animate(t){
+        requestAnimationFrame(animate);
+        const speed = parseFloat(simSpeedInput.value) || 1;
+        const dt = lastTime ? (t - lastTime)/1000 * speed : 0.016;
+        lastTime = t;
+
+        if(running){
+          for(let i=0;i<particles.length;i++){
+            const p = particles[i];
+            p.mesh.position.addScaledVector(p.vel, dt);
+            ['x','y','z'].forEach(ax=>{
+              if(Math.abs(p.mesh.position[ax]) > BOUNDS){
+                p.mesh.position[ax] = THREE.MathUtils.clamp(p.mesh.position[ax], -BOUNDS, BOUNDS);
+                p.vel[ax] *= -1;
+              }
+            });
+          }
+
+          // 충돌/반응 처리
+          for(let i=0;i<particles.length;i++){
+            for(let j=i+1;j<particles.length;j++){
+              const A = particles[i];
+              const B = particles[j];
+              const dist = A.mesh.position.distanceTo(B.mesh.position);
+              if(dist <= A.radius + B.radius){
+                const normal = new THREE.Vector3().subVectors(B.mesh.position, A.mesh.position).normalize();
+                const relative = new THREE.Vector3().subVectors(B.vel, A.vel);
+                const sepVel = relative.dot(normal);
+                if(sepVel < 0){
+                  const impulse = normal.multiplyScalar(-1.8 * sepVel / (A.mass + B.mass));
+                  A.vel.addScaledVector(impulse, B.mass);
+                  B.vel.addScaledVector(impulse, -A.mass);
+                }
+
+                const rule = reactionBetween(A,B);
+                if(rule){
+                  const temp = parseFloat(tempInput.value) || 0;
+                  const prob = rule.probBase * (0.4 + 0.006*temp);
+                  if(Math.random() < prob){
+                    const pos = new THREE.Vector3().addVectors(A.mesh.position, B.mesh.position).multiplyScalar(0.5);
+                    rule.products.forEach(prod=>{
+                      for(let k=0;k<prod.count;k++){
+                        spawnParticle(prod.id, pos.clone().add(new THREE.Vector3(rand(-0.5,0.5), rand(-0.2,0.2), rand(-0.5,0.5))));
+                      }
+                    });
+
+                    log(`${A.id} + ${B.id} → ${rule.products.map(p=>p.id+'×'+p.count).join(', ')}`);
+
+                    // 원래 입자 제거; 주의: splice로 인덱스가 변하므로 뒤에서 제거
+                    const toRemove = [A,B];
+                    toRemove.sort((x,y)=>particles.indexOf(y)-particles.indexOf(x));
+                    toRemove.forEach(p=>{
+                      const idx = particles.indexOf(p);
+                      if(idx !== -1){
+                        scene.remove(p.mesh);
+                        particles.splice(idx,1);
+                      }
+                    });
+
+                    break; // 내부 루프 탈출
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // 컨트롤과 렌더 업데이트
+        controls.update();
+        const w = canvas.clientWidth || window.innerWidth;
+        const h = canvas.clientHeight || window.innerHeight;
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.render(scene, camera);
+
+        statusEl.textContent = running ? `Running — particles: ${particles.length}` : 'Paused';
+      }
+
+      // 초기 렌더 크기
+      (function initSize(){
+        const w = canvas.clientWidth || window.innerWidth;
+        const h = canvas.clientHeight || window.innerHeight;
+        renderer.setSize(w,h,false);
+        camera.aspect = w/h;
+        camera.updateProjectionMatrix();
+      })();
+
+      requestAnimationFrame(animate);
+
+      // 이벤트 바인딩
+      startBtn.addEventListener('click', ()=>{
+        if(!running){
+          if(particles.length === 0) createInitialParticles();
+          running = true; lastTime = 0; log('시뮬레이션 시작');
+        }
+      });
+      pauseBtn.addEventListener('click', ()=>{ running = !running; log(running? '다시 시작' : '일시정지'); });
+      resetBtn.addEventListener('click', ()=>{ running=false; clearParticles(); log('리셋'); statusEl.textContent='시작 전'; });
+
+      window.addEventListener('resize', ()=>{
+        const w = canvas.clientWidth || window.innerWidth;
+        const h = canvas.clientHeight || window.innerHeight;
+        renderer.setSize(w,h,false);
+        camera.aspect = w/h;
+        camera.updateProjectionMatrix();
+      });
+
+      // 기본 입자 생성
+      createInitialParticles();
+
+    }catch(err){
+      // 에러가 발생하면 화면에 표시합니다.
+      console.error(err);
+      const libError = document.getElementById('lib-error');
+      libError.style.display = 'block';
+      libError.textContent = '스크립트 실행 중 오류가 발생했습니다: ' + (err && err.message ? err.message : err);
+    }
+  </script>
+</body>
+</html>
