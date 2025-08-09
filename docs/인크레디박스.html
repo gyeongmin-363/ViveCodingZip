@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mini-Incredibox</title>
+<style>
+  :root{
+    --bg: #0f1724;
+    --card: #0b1220;
+    --accent: #ff7a59;
+    --muted: #94a3b8;
+    --glass: rgba(255,255,255,0.04);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:Inter, system-ui, Arial, sans-serif;
+    background: linear-gradient(180deg,#071028 0%, #0f1724 100%);
+    color: #e6eef8;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  header{
+    padding:18px 24px;
+    display:flex;
+    gap:16px;
+    align-items:center;
+    border-bottom:1px solid rgba(255,255,255,0.03);
+  }
+  h1{font-size:18px;margin:0}
+  .controls{display:flex;gap:12px;align-items:center;margin-left:auto}
+  .btn{
+    background:var(--glass);
+    border:1px solid rgba(255,255,255,0.03);
+    padding:8px 12px;border-radius:10px;cursor:pointer;color:inherit;
+    display:inline-flex;gap:8px;align-items:center;font-weight:600;
+  }
+  .btn:active{transform:translateY(1px)}
+  .control-row{display:flex;gap:10px;align-items:center}
+  .control-row label{font-size:12px;color:var(--muted);margin-right:6px}
+
+  main{padding:18px; display:flex;flex-direction:column;gap:16px;max-width:1100px;margin:18px auto}
+  .stage{
+    display:grid;grid-template-columns:repeat(6,1fr);gap:14px;padding:14px;
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:14px;border:1px solid rgba(255,255,255,0.03);
+  }
+  .slot{
+    height:160px;border-radius:12px;background:var(--card);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;position:relative;padding:10px;
+    transition:transform .12s, box-shadow .12s;
+  }
+  .slot.playing{box-shadow:0 8px 30px rgba(0,0,0,0.5);transform:translateY(-4px)}
+  .avatar{
+    width:84px;height:84px;border-radius:16px;background:linear-gradient(135deg,#2a3b5a,#1b2a3d);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;
+    color:#fff;margin-bottom:8px;
+  }
+  .slot .label{font-size:13px;color:var(--muted);min-height:20px;text-align:center}
+
+  .palette{
+    display:flex;gap:12px;flex-wrap:wrap;padding:12px;background:transparent;border-radius:12px;
+  }
+  .sound{
+    width:140px;padding:10px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border:1px solid rgba(255,255,255,0.03);cursor:grab;user-select:none;
+    display:flex;gap:10px;align-items:center;
+  }
+  .sound:active{cursor:grabbing}
+  .sound .icon{
+    width:44;height:44;border-radius:8px;background:linear-gradient(135deg,#11283a,#0b1b2a);display:flex;align-items:center;justify-content:center;font-weight:700;
+    font-size:18px;color:var(--accent);
+  }
+  .sound .meta{font-size:13px}
+  footer{max-width:1100px;margin:0 auto;padding:10px 18px;color:var(--muted);font-size:13px;text-align:center}
+  .slot.drop-hover{outline:2px dashed rgba(255,255,255,0.06);}
+
+  /* small */
+  @media(max-width:880px){
+    .stage{grid-template-columns:repeat(3,1fr)}
+  }
+  @media(max-width:520px){
+    .stage{grid-template-columns:repeat(2,1fr)}
+    .sound{width:100%}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mini-Incredibox — Web Audio 데모</h1>
+  <div class="controls">
+    <button id="playBtn" class="btn">Play ▶</button>
+    <div class="control-row">
+      <label for="tempo">Tempo</label>
+      <input id="tempo" type="range" min="60" max="180" value="120">
+      <span id="tempoVal">120</span>
+    </div>
+    <div class="control-row">
+      <label for="masterVol">Vol</label>
+      <input id="masterVol" type="range" min="0" max="1" step="0.01" value="0.8">
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="stage" id="stage">
+    <!-- 6 slots -->
+    <div class="slot" data-slot="0">
+      <div class="avatar">A</div>
+      <div class="label">빈 슬롯</div>
+    </div>
+    <div class="slot" data-slot="1">
+      <div class="avatar">B</div>
+      <div class="label">빈 슬롯</div>
+    </div>
+    <div class="slot" data-slot="2">
+      <div class="avatar">C</div>
+      <div class="label">빈 슬롯</div>
+    </div>
+    <div class="slot" data-slot="3">
+      <div class="avatar">D</div>
+      <div class="label">빈 슬롯</div>
+    </div>
+    <div class="slot" data-slot="4">
+      <div class="avatar">E</div>
+      <div class="label">빈 슬롯</div>
+    </div>
+    <div class="slot" data-slot="5">
+      <div class="avatar">F</div>
+      <div class="label">빈 슬롯</div>
+    </div>
+  </section>
+
+  <section>
+    <h3 style="margin:8px 0 6px 4px;color:var(--muted);font-weight:600">사운드 팔레트 — 드래그해서 슬롯에 올리세요</h3>
+    <div class="palette" id="palette">
+      <!-- sounds injected by JS -->
+    </div>
+  </section>
+</main>
+
+<footer>
+  이 데모는 Incredibox 스타일의 간단한 복제물입니다. 원작: Incredibox — https://www.incredibox.com<br>
+  Web Audio API 문서: https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API
+</footer>
+
+<script>
+/*
+  Mini-Incredibox (single-file)
+  - 드래그 앤 드롭으로 사운드를 슬롯에 배치
+  - 재생 / 정지, 템포, 마스터 볼륨 제어
+  - Web Audio API로 간단한 킥/스네어/하이햇/신스/보컬(!) 합성
+*/
+
+const soundsMeta = [
+  { id: 'kick', name: 'Kick', type:'kick', pattern:[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0] },
+  { id: 'snare', name: 'Snare', type:'snare', pattern:[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0] },
+  { id: 'hat', name: 'Hat', type:'hat', pattern:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] },
+  { id: 'bass', name: 'Bass', type:'synth', freq: 100, pattern:[1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0] },
+  { id: 'lead', name: 'Lead', type:'synth', freq: 600, pattern:[0,0,1,0,0,1,0,0,0,1,0,0,0,1,0,0] },
+  { id: 'vox', name: 'Vox', type:'vocal', pattern:[0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1] },
+  { id: 'clap', name: 'Clap', type:'snare', pattern:[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0] }
+];
+
+// state
+const assignments = new Array(6).fill(null); // slot -> soundId or null
+let audioCtx = null;
+let isPlaying = false;
+let tempo = 120;
+let masterGainNode = null;
+let stepTimer = null;
+let currentStep = 0;
+let stepIntervalMs = null;
+
+// create UI sound cards
+const palette = document.getElementById('palette');
+soundsMeta.forEach(s=>{
+  const card = document.createElement('div');
+  card.className = 'sound';
+  card.draggable = true;
+  card.dataset.soundId = s.id;
+  card.innerHTML = `
+    <div class="icon">${s.name[0]}</div>
+    <div class="meta">
+      <div style="font-weight:700">${s.name}</div>
+      <div style="font-size:12px;color:var(--muted)">${s.type}</div>
+    </div>
+  `;
+  card.addEventListener('dragstart', e=>{
+    e.dataTransfer.setData('text/plain', s.id);
+  });
+  palette.appendChild(card);
+});
+
+// drag & drop on slots
+document.querySelectorAll('.slot').forEach(slot=>{
+  slot.addEventListener('dragover', e=>{ e.preventDefault(); slot.classList.add('drop-hover') });
+  slot.addEventListener('dragleave', e=>{ slot.classList.remove('drop-hover') });
+  slot.addEventListener('drop', e=>{
+    e.preventDefault(); slot.classList.remove('drop-hover');
+    const soundId = e.dataTransfer.getData('text/plain');
+    const idx = +slot.dataset.slot;
+    assignSoundToSlot(idx, soundId);
+  });
+
+  // right-click to clear assignment
+  slot.addEventListener('contextmenu', e=>{
+    e.preventDefault();
+    const idx = +slot.dataset.slot;
+    clearSlot(idx);
+  });
+});
+
+// assign / clear logic + UI update
+function assignSoundToSlot(slotIdx, soundId){
+  const meta = soundsMeta.find(s=>s.id===soundId);
+  assignments[slotIdx] = meta ? meta.id : null;
+  updateSlotUI(slotIdx);
+}
+function clearSlot(slotIdx){
+  assignments[slotIdx] = null;
+  updateSlotUI(slotIdx);
+}
+function updateSlotUI(slotIdx){
+  const slot = document.querySelector(`.slot[data-slot="${slotIdx}"]`);
+  const label = slot.querySelector('.label');
+  const avatar = slot.querySelector('.avatar');
+  const assigned = assignments[slotIdx];
+  if(assigned){
+    const meta = soundsMeta.find(s=>s.id===assigned);
+    label.textContent = meta.name + " — " + meta.type;
+    avatar.style.background = `linear-gradient(135deg, #${stringToColor(meta.id)}, #142536)`;
+  } else {
+    label.textContent = '빈 슬롯';
+    avatar.style.background = 'linear-gradient(135deg,#2a3b5a,#1b2a3d)';
+  }
+}
+
+// tiny deterministic color from string
+function stringToColor(str){
+  let h=0; for(let i=0;i<str.length;i++) h = (h<<5) - h + str.charCodeAt(i);
+  const c = (h & 0x00FFFFFF).toString(16).toUpperCase().padStart(6,'0');
+  return c;
+}
+
+// audio setup
+function initAudio(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGainNode = audioCtx.createGain();
+  masterGainNode.gain.value = +document.getElementById('masterVol').value;
+  masterGainNode.connect(audioCtx.destination);
+}
+
+function setMasterVolume(v){
+  if(masterGainNode) masterGainNode.gain.value = v;
+}
+
+// playback scheduler (simple step sequencer)
+function startSequencer(){
+  if(!audioCtx) initAudio();
+  if(isPlaying) return;
+  isPlaying = true;
+  currentStep = 0;
+  document.getElementById('playBtn').textContent = 'Pause ■';
+  updateStepInterval();
+  stepTimer = setInterval(stepTick, stepIntervalMs);
+}
+function stopSequencer(){
+  isPlaying = false;
+  document.getElementById('playBtn').textContent = 'Play ▶';
+  clearInterval(stepTimer);
+  document.querySelectorAll('.slot').forEach(s=>s.classList.remove('playing'));
+}
+
+// handle each step
+function stepTick(){
+  // for each slot, if assigned sound has pattern at currentStep -> trigger
+  assignments.forEach((soundId, idx)=>{
+    if(!soundId) return;
+    const meta = soundsMeta.find(s=>s.id===soundId);
+    if(!meta) return;
+    const pattern = meta.pattern || [];
+    const on = pattern[currentStep % pattern.length];
+    if(on){
+      triggerSound(meta);
+      // animate slot briefly
+      const slot = document.querySelector(`.slot[data-slot="${idx}"]`);
+      slot.classList.add('playing');
+      setTimeout(()=>slot.classList.remove('playing'), 120);
+    }
+  });
+  currentStep = (currentStep + 1) % 16;
+}
+
+// sound synthesis functions
+function triggerSound(meta){
+  if(!audioCtx) initAudio();
+
+  switch(meta.type){
+    case 'kick': synthKick(); break;
+    case 'snare': synthSnare(); break;
+    case 'hat': synthHat(); break;
+    case 'synth': synthTone(meta.freq || 440); break;
+    case 'vocal': synthVocal(); break;
+    default: synthTone(440); break;
+  }
+}
+
+// simple kick (pitch drop)
+function synthKick(){
+  const now = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(150, now);
+  o.frequency.exponentialRampToValueAtTime(40, now + 0.12);
+  g.gain.setValueAtTime(1, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+  o.connect(g); g.connect(masterGainNode);
+  o.start(now); o.stop(now + 0.5);
+}
+
+// snare (noise + tone)
+function synthSnare(){
+  const now = audioCtx.currentTime;
+  // noise
+  const bufferSize = audioCtx.sampleRate * 0.2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for(let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * Math.exp(-i/bufferSize*6);
+  const src = audioCtx.createBufferSource(); src.buffer = buffer;
+  const g = audioCtx.createGain(); g.gain.setValueAtTime(0.7, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+  src.connect(g); g.connect(masterGainNode);
+  src.start(now); src.stop(now + 0.2);
+
+  // body tone
+  const o = audioCtx.createOscillator(); o.type='triangle';
+  o.frequency.setValueAtTime(150, now);
+  const g2 = audioCtx.createGain(); g2.gain.setValueAtTime(0.4, now);
+  g2.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+  o.connect(g2); g2.connect(masterGainNode);
+  o.start(now); o.stop(now + 0.2);
+}
+
+// hi-hat (filtered noise short)
+function synthHat(){
+  const now = audioCtx.currentTime;
+  const bufferSize = audioCtx.sampleRate * 0.05;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for(let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * Math.exp(-i/bufferSize*10);
+  const src = audioCtx.createBufferSource(); src.buffer = buffer;
+  const filter = audioCtx.createBiquadFilter(); filter.type = 'highpass'; filter.frequency.value = 7000;
+  const g = audioCtx.createGain(); g.gain.setValueAtTime(0.35, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+  src.connect(filter); filter.connect(g); g.connect(masterGainNode);
+  src.start(now); src.stop(now + 0.06);
+}
+
+// simple synth tone with short envelope
+function synthTone(freq){
+  const now = audioCtx.currentTime;
+  const o = audioCtx.createOscillator(); o.type = 'sawtooth';
+  o.frequency.setValueAtTime(freq || 440, now);
+  const g = audioCtx.createGain(); g.gain.setValueAtTime(0.0001, now);
+  g.gain.linearRampToValueAtTime(0.6, now + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+  // mild filter
+  const filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 2000;
+  o.connect(filter); filter.connect(g); g.connect(masterGainNode);
+  o.start(now); o.stop(now + 0.3);
+}
+
+// "vocal" — frequency-modulated short vowel-ish sound
+function synthVocal(){
+  const now = audioCtx.currentTime;
+  const o1 = audioCtx.createOscillator(); o1.type='sine'; o1.frequency.setValueAtTime(300, now);
+  const o2 = audioCtx.createOscillator(); o2.type='sine'; o2.frequency.setValueAtTime(600, now);
+  const g = audioCtx.createGain(); g.gain.setValueAtTime(0.0001, now);
+  g.gain.linearRampToValueAtTime(0.7, now + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+  const filter = audioCtx.createBiquadFilter(); filter.type='bandpass'; filter.frequency.value = 900;
+  o1.connect(filter); o2.connect(filter); filter.connect(g); g.connect(masterGainNode);
+  o1.start(now); o2.start(now);
+  o1.stop(now + 0.36); o2.stop(now + 0.36);
+}
+
+// controls
+document.getElementById('playBtn').addEventListener('click', async ()=>{
+  if(!audioCtx) initAudio();
+  // resume context on user gesture if suspended
+  if(audioCtx.state === 'suspended') await audioCtx.resume();
+  if(!isPlaying) startSequencer(); else stopSequencer();
+});
+document.getElementById('tempo').addEventListener('input', e=>{
+  tempo = +e.target.value;
+  document.getElementById('tempoVal').textContent = tempo;
+  updateStepInterval();
+  if(isPlaying){
+    clearInterval(stepTimer);
+    stepTimer = setInterval(stepTick, stepIntervalMs);
+  }
+});
+document.getElementById('masterVol').addEventListener('input', e=>{
+  setMasterVolume(+e.target.value);
+});
+
+// compute interval for 16th steps (4 steps per beat)
+function updateStepInterval(){
+  // quarter note = 60000/tempo ms; 16th note = quarter/4
+  stepIntervalMs = (60000/tempo) / 4;
+}
+
+// init default UI
+document.getElementById('tempoVal').textContent = tempo;
+updateStepInterval();
+
+// keyboard shortcuts
+window.addEventListener('keydown', e=>{
+  if(e.key === ' '){ e.preventDefault(); document.getElementById('playBtn').click(); }
+});
+
+// click a palette item to preview sound once
+palette.addEventListener('click', e=>{
+  const card = e.target.closest('.sound');
+  if(!card) return;
+  initAudio();
+  const id = card.dataset.soundId;
+  const meta = soundsMeta.find(s=>s.id===id);
+  if(meta) triggerSound(meta);
+});
+
+// initial render of slot UI
+for(let i=0;i<6;i++) updateSlotUI(i);
+
+// optional: small touch support for mobile drag: allow tapping sound then tapping slot to assign
+let pickedSound = null;
+palette.addEventListener('touchstart', e=>{
+  const card = e.target.closest('.sound');
+  if(!card) return;
+  pickedSound = card.dataset.soundId;
+  // visual cue could be added
+});
+document.querySelectorAll('.slot').forEach(slot=>{
+  slot.addEventListener('touchend', e=>{
+    if(pickedSound){
+      const idx = +slot.dataset.slot;
+      assignSoundToSlot(idx, pickedSound);
+      pickedSound = null;
+    }
+  });
+});
+
+// help text: right-click to clear slot
+document.addEventListener('DOMContentLoaded', ()=>{
+  // nothing more yet
+});
+</script>
+</body>
+</html>
