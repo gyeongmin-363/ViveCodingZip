@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>미니 숲속 마을</title>
+    <!-- Tailwind CSS (스타일링용) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js (3D 엔진) - 안정적인 r128 버전 사용 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Noto Sans KR', sans-serif; user-select: none; }
+        #ui-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .ui-element { pointer-events: auto; }
+        
+        /* 말풍선 스타일 */
+        #dialogue-box {
+            display: none;
+            position: absolute;
+            bottom: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 20px;
+            border: 4px solid #4ade80;
+            max-width: 80%;
+            width: 400px;
+            text-align: center;
+            font-weight: bold;
+            color: #374151;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        /* 인벤토리 스타일 */
+        #inventory {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        .item-slot {
+            width: 40px;
+            height: 40px;
+            background: #e5e7eb;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            border: 2px solid #9ca3af;
+        }
+
+        /* 모바일 조이스틱 영역 */
+        #joystick-zone {
+            position: absolute;
+            bottom: 50px;
+            left: 50px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: none; /* JS에서 모바일 감지 시 block으로 변경 */
+            pointer-events: auto;
+        }
+        
+        #joystick-knob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        #action-btn {
+            position: absolute;
+            bottom: 60px;
+            right: 60px;
+            width: 80px;
+            height: 80px;
+            background: #fbbf24;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 4px 0 #d97706;
+            pointer-events: auto;
+            active:translate-y(4px);
+        }
+        
+        /* 로딩 화면 */
+        #loading {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #84cc16;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: white;
+            z-index: 9999;
+            transition: opacity 1s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D 캔버스 컨테이너 -->
+    <div id="canvas-container"></div>
+
+    <!-- UI 오버레이 -->
+    <div id="ui-container">
+        <!-- 인벤토리 -->
+        <div id="inventory" class="ui-element">
+            <div class="item-slot" id="slot-apple">🍎 <span id="count-apple" class="text-xs ml-1 font-bold">0</span></div>
+            <div class="item-slot" id="slot-flower">🌸 <span id="count-flower" class="text-xs ml-1 font-bold">0</span></div>
+            <div class="item-slot" id="slot-money">💰 <span id="count-money" class="text-xs ml-1 font-bold">0</span></div>
+        </div>
+
+        <!-- 대화창 -->
+        <div id="dialogue-box" class="ui-element">
+            <p id="dialogue-text">안녕하세요!</p>
+            <p class="text-xs text-gray-400 mt-2">(스페이스바 또는 터치로 닫기)</p>
+        </div>
+
+        <!-- 컨트롤 안내 (PC) -->
+        <div id="controls-hint" class="absolute bottom-4 left-4 text-white text-shadow bg-black/30 p-2 rounded hidden md:block">
+            이동: WASD / 방향키 <br>
+            상호작용: SPACE <br>
+            달리기: SHIFT
+        </div>
+
+        <!-- 모바일 컨트롤 -->
+        <div id="joystick-zone">
+            <div id="joystick-knob"></div>
+        </div>
+        <div id="action-btn" class="ui-element">잡기</div>
+    </div>
+
+    <!-- 로딩 화면 -->
+    <div id="loading">
+        <h1 class="text-4xl font-bold mb-4">🌳 숲속 마을</h1>
+        <p>마을을 생성하는 중입니다...</p>
+    </div>
+
+<script>
+    /**
+     * 전역 변수 및 설정
+     */
+    let scene, camera, renderer;
+    let player;
+    let clock; // 초기화 지연
+    let keys = {};
+    let interactables = []; // 상호작용 가능한 객체들 (나무, 아이템, NPC)
+    let inventory = { apple: 0, flower: 0, money: 0 };
+    
+    // 플레이어 이동 관련 변수
+    const playerSpeed = 5;
+    const runSpeed = 8;
+    let isMoving = false;
+    
+    // 모바일 조이스틱 변수
+    let joystickActive = false;
+    let joystickData = { x: 0, y: 0 };
+    
+    // 게임 상태
+    let dialogueActive = false;
+
+    /**
+     * 초기화 함수
+     */
+    function init() {
+        // THREE 로드 확인
+        if (typeof THREE === 'undefined') {
+            alert('3D 엔진 로드에 실패했습니다. 페이지를 새로고침 해주세요.');
+            return;
+        }
+
+        clock = new THREE.Clock();
+
+        // 1. 씬 생성 (하늘색 배경)
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // 맑은 하늘색
+        scene.fog = new THREE.Fog(0x87CEEB, 10, 50);
+
+        // 2. 카메라 설정
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 10, 10); // 쿼터뷰 시점
+
+        // 3. 렌더러 설정
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true; // 그림자 활성화
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // 4. 조명 설정
+        setupLights();
+
+        // 5. 월드 생성 (땅, 나무, 집)
+        createWorld();
+
+        // 6. 플레이어 생성
+        createPlayer();
+
+        // 7. 이벤트 리스너 등록
+        window.addEventListener('resize', onWindowResize, false);
+        window.addEventListener('keydown', (e) => keys[e.code] = true);
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+            if (e.code === 'Space' && !dialogueActive) {
+                checkInteraction();
+            } else if (e.code === 'Space' && dialogueActive) {
+                closeDialogue();
+            }
+        });
+
+        setupMobileControls();
+        update();
+
+        // 로딩 화면 제거
+        setTimeout(() => {
+            const loading = document.getElementById('loading');
+            if(loading) {
+                loading.style.opacity = 0;
+                setTimeout(() => {
+                    loading.style.display = 'none';
+                }, 1000);
+            }
+        }, 1500);
+    }
+
+    /**
+     * 조명 설정
+     */
+    function setupLights() {
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(20, 50, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        // 그림자 범위 설정
+        const d = 30;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+    }
+
+    /**
+     * 월드 오브젝트 생성 (절차적 생성)
+     */
+    function createWorld() {
+        // 땅
+        const groundGeometry = new THREE.CylinderGeometry(40, 40, 1, 64);
+        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x7cfc00 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.position.y = -0.5;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // 강
+        const riverGeo = new THREE.PlaneGeometry(80, 10);
+        const riverMat = new THREE.MeshStandardMaterial({ color: 0x4fc3f7 });
+        const river = new THREE.Mesh(riverGeo, riverMat);
+        river.rotation.x = -Math.PI / 2;
+        river.position.y = -0.4;
+        river.position.z = -15;
+        river.receiveShadow = true;
+        scene.add(river);
+
+        createHouse(0, -10);
+
+        // 나무 랜덤 생성
+        for (let i = 0; i < 15; i++) {
+            let x = (Math.random() - 0.5) * 50;
+            let z = (Math.random() - 0.5) * 50;
+            if (Math.abs(x) < 8 && Math.abs(z + 10) < 8) continue;
+            if (z < -10 && z > -20) continue; 
+            createTree(x, z);
+        }
+
+        // 바위 생성
+        for (let i = 0; i < 5; i++) {
+            let x = (Math.random() - 0.5) * 50;
+            let z = (Math.random() - 0.5) * 50;
+            if (z < -10 && z > -20) continue;
+            createRock(x, z);
+        }
+
+        createNPC(5, 5, 0xffaa00, "너구리");
+        createNPC(-5, 8, 0xffffff, "토끼");
+    }
+
+    /**
+     * 나무 생성 함수
+     */
+    function createTree(x, z) {
+        const group = new THREE.Group();
+        group.position.set(x, 0, z);
+
+        const trunkGeo = new THREE.CylinderGeometry(0.3, 0.4, 2, 8);
+        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+        trunk.position.y = 1;
+        trunk.castShadow = true;
+        trunk.receiveShadow = true;
+        group.add(trunk);
+
+        const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+        const leaves1 = new THREE.Mesh(new THREE.ConeGeometry(1.5, 2, 8), leavesMat);
+        leaves1.position.y = 2.5;
+        leaves1.castShadow = true;
+        group.add(leaves1);
+
+        const leaves2 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 1.5, 8), leavesMat);
+        leaves2.position.y = 3.5;
+        leaves2.castShadow = true;
+        group.add(leaves2);
+
+        if (Math.random() > 0.5) {
+            const appleGeo = new THREE.SphereGeometry(0.2, 8, 8);
+            const appleMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            const apple = new THREE.Mesh(appleGeo, appleMat);
+            apple.position.set(0.5, 2.5, 0.5);
+            group.add(apple);
+            group.userData = { type: 'tree', hasApple: true, appleMesh: apple };
+        } else {
+            group.userData = { type: 'tree', hasApple: false };
+        }
+
+        scene.add(group);
+        interactables.push(group);
+    }
+
+    /**
+     * 집 생성 함수
+     */
+    function createHouse(x, z) {
+        const group = new THREE.Group();
+        group.position.set(x, 0, z);
+
+        const wallGeo = new THREE.BoxGeometry(4, 3, 4);
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xfef9c3 });
+        const walls = new THREE.Mesh(wallGeo, wallMat);
+        walls.position.y = 1.5;
+        walls.castShadow = true;
+        walls.receiveShadow = true;
+        group.add(walls);
+
+        const roofGeo = new THREE.ConeGeometry(3.5, 2, 4);
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0xea580c });
+        const roof = new THREE.Mesh(roofGeo, roofMat);
+        roof.position.y = 4;
+        roof.rotation.y = Math.PI / 4;
+        roof.castShadow = true;
+        group.add(roof);
+
+        const doorGeo = new THREE.PlaneGeometry(1, 2);
+        const doorMat = new THREE.MeshStandardMaterial({ color: 0x5d4037 });
+        const door = new THREE.Mesh(doorGeo, doorMat);
+        door.position.set(0, 1, 2.01);
+        group.add(door);
+
+        scene.add(group);
+        group.userData = { type: 'house' };
+        interactables.push(group);
+    }
+
+    /**
+     * 바위 생성
+     */
+    function createRock(x, z) {
+        const geo = new THREE.DodecahedronGeometry(0.8, 0);
+        const mat = new THREE.MeshStandardMaterial({ color: 0x808080 });
+        const rock = new THREE.Mesh(geo, mat);
+        rock.position.set(x, 0.5, z);
+        rock.castShadow = true;
+        rock.receiveShadow = true;
+        rock.userData = { type: 'rock', hitCount: 0 };
+        scene.add(rock);
+        interactables.push(rock);
+    }
+
+    /**
+     * NPC 생성
+     */
+    function createNPC(x, z, color, name) {
+        const group = new THREE.Group();
+        group.position.set(x, 0, z);
+
+        // 몸통: r128 호환을 위해 CylinderGeometry 사용 (Capsule 대체)
+        const bodyGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.2, 8);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: color });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.6;
+        body.castShadow = true;
+        group.add(body);
+
+        // 머리
+        const headGeo = new THREE.SphereGeometry(0.5, 16, 16);
+        const head = new THREE.Mesh(headGeo, bodyMat);
+        head.position.y = 1.3;
+        head.castShadow = true;
+        group.add(head);
+
+        // 눈
+        const eyeGeo = new THREE.SphereGeometry(0.05, 4, 4);
+        const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+        leftEye.position.set(-0.15, 1.35, 0.45);
+        group.add(leftEye);
+        const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+        rightEye.position.set(0.15, 1.35, 0.45);
+        group.add(rightEye);
+
+        scene.add(group);
+        
+        group.userData = { 
+            type: 'npc', 
+            name: name, 
+            dir: new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize(),
+            moveTimer: 0 
+        };
+        interactables.push(group);
+    }
+
+    /**
+     * 플레이어 생성
+     */
+    function createPlayer() {
+        player = new THREE.Group();
+
+        // 몸통: r128 호환을 위해 CylinderGeometry 사용
+        const geometry = new THREE.CylinderGeometry(0.4, 0.4, 1.0, 8);
+        const material = new THREE.MeshStandardMaterial({ color: 0xff69b4 }); // 핑크색
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.y = 0.5; // 높이 절반
+        mesh.castShadow = true;
+        
+        // 머리
+        const headGeo = new THREE.SphereGeometry(0.55, 16, 16);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xffe0bd }); // 살구색
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.y = 1.2;
+        head.castShadow = true;
+
+        player.add(mesh);
+        player.add(head);
+        
+        // 코
+        const nose = new THREE.Mesh(
+            new THREE.SphereGeometry(0.1, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0xff0000 })
+        );
+        nose.position.set(0, 1.2, 0.5);
+        player.add(nose);
+
+        player.position.set(0, 0, 5);
+        scene.add(player);
+    }
+
+    /**
+     * 아이템 생성
+     */
+    function spawnItem(x, z, type) {
+        let mesh;
+        if (type === 'apple') {
+            mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(0.2, 8, 8),
+                new THREE.MeshStandardMaterial({ color: 0xff0000 })
+            );
+        } else if (type === 'flower') {
+            mesh = new THREE.Group();
+            const petals = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.2, 0, 0.2, 5),
+                new THREE.MeshStandardMaterial({ color: 0xffd700 })
+            );
+            petals.position.y = 0.1;
+            mesh.add(petals);
+            const stem = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.05, 0.05, 0.3),
+                new THREE.MeshStandardMaterial({ color: 0x008000 })
+            );
+            mesh.add(stem);
+        } else if (type === 'money') {
+            mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(0.2, 8, 8),
+                new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.5, roughness: 0.2 })
+            );
+        }
+
+        if (mesh) {
+            mesh.position.set(x, 0.2, z);
+            mesh.castShadow = true;
+            mesh.userData = { type: 'item', itemType: type };
+            scene.add(mesh);
+            interactables.push(mesh);
+            
+            const initialY = mesh.position.y;
+            let time = 0;
+            const animateDrop = () => {
+                time += 0.1;
+                mesh.position.y = initialY + Math.abs(Math.sin(time)) * 0.5;
+                if(time < Math.PI) requestAnimationFrame(animateDrop);
+                else mesh.position.y = 0.2;
+            };
+            animateDrop();
+        }
+    }
+
+    /**
+     * 상호작용 및 게임 로직
+     */
+    function checkInteraction() {
+        if (!player) return;
+
+        let closest = null;
+        let minDist = 2.0;
+
+        for (let obj of interactables) {
+            if (!obj.parent) continue;
+            const dist = player.position.distanceTo(obj.position);
+            if (dist < minDist) {
+                closest = obj;
+                minDist = dist;
+            }
+        }
+
+        if (closest) handleInteraction(closest);
+    }
+
+    function handleInteraction(obj) {
+        const type = obj.userData.type;
+
+        if (type === 'tree') {
+            shakeObject(obj);
+            if (obj.userData.hasApple) {
+                showDialogue("나무를 흔들었더니 사과가 떨어졌어요!");
+                obj.userData.hasApple = false;
+                obj.remove(obj.userData.appleMesh);
+                const offset = new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize();
+                spawnItem(obj.position.x + offset.x, obj.position.z + offset.z, 'apple');
+            } else {
+                showDialogue("아무것도 떨어지지 않네요.");
+            }
+        } else if (type === 'rock') {
+            shakeObject(obj);
+            obj.userData.hitCount++;
+            if (obj.userData.hitCount % 3 === 0) {
+                 showDialogue("바위에서 동전이 나왔어요!");
+                 const offset = new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize();
+                 spawnItem(obj.position.x + offset.x, obj.position.z + offset.z, 'money');
+            } else {
+                 showDialogue("단단한 바위입니다.");
+            }
+
+        } else if (type === 'item') {
+            const itemType = obj.userData.itemType;
+            inventory[itemType]++;
+            updateInventoryUI();
+            
+            scene.remove(obj);
+            const index = interactables.indexOf(obj);
+            if (index > -1) interactables.splice(index, 1);
+
+            let msg = "";
+            if(itemType === 'apple') msg = "사과를 주웠습니다!";
+            else if(itemType === 'flower') msg = "예쁜 꽃을 주웠습니다!";
+            else if(itemType === 'money') msg = "동전을 획득했습니다! (100벨)";
+            showDialogue(msg);
+
+        } else if (type === 'npc') {
+            const greetings = ["오늘 날씨가 참 좋죠?", "새로운 친구인가요?", "이 마을은 정말 평화로워요."];
+            const randomMsg = greetings[Math.floor(Math.random() * greetings.length)];
+            obj.lookAt(player.position);
+            showDialogue(`${obj.userData.name}: ${randomMsg}`);
+        } else if (type === 'house') {
+            showDialogue("우리 집이에요! 아늑하네요.");
+        }
+    }
+
+    function shakeObject(obj) {
+        const startX = obj.position.x;
+        let count = 0;
+        const shaker = setInterval(() => {
+            count++;
+            obj.position.x = startX + Math.sin(count) * 0.1;
+            if (count > 10) {
+                clearInterval(shaker);
+                obj.position.x = startX;
+            }
+        }, 30);
+    }
+
+    function updateInventoryUI() {
+        document.getElementById('count-apple').innerText = inventory.apple;
+        document.getElementById('count-flower').innerText = inventory.flower;
+        document.getElementById('count-money').innerText = inventory.money * 100;
+    }
+
+    function showDialogue(text) {
+        const box = document.getElementById('dialogue-box');
+        document.getElementById('dialogue-text').innerText = text;
+        box.style.display = 'block';
+        dialogueActive = true;
+    }
+
+    function closeDialogue() {
+        document.getElementById('dialogue-box').style.display = 'none';
+        dialogueActive = false;
+    }
+
+    function update() {
+        requestAnimationFrame(update);
+        
+        // clock이 초기화되지 않았다면 건너뜀
+        if (!clock) return;
+
+        const delta = clock.getDelta();
+
+        if (player) {
+            updatePlayerMovement(delta);
+            updateCamera();
+        }
+
+        updateNPCs(delta);
+        renderer.render(scene, camera);
+    }
+
+    function updatePlayerMovement(delta) {
+        if (dialogueActive) return;
+
+        let moveX = 0;
+        let moveZ = 0;
+
+        if (keys['ArrowUp'] || keys['KeyW']) moveZ = -1;
+        if (keys['ArrowDown'] || keys['KeyS']) moveZ = 1;
+        if (keys['ArrowLeft'] || keys['KeyA']) moveX = -1;
+        if (keys['ArrowRight'] || keys['KeyD']) moveX = 1;
+
+        if (joystickActive) {
+            moveX = joystickData.x;
+            moveZ = joystickData.y;
+        }
+
+        if (moveX !== 0 || moveZ !== 0) {
+            isMoving = true;
+            const speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? runSpeed : playerSpeed;
+            player.position.x += moveX * speed * delta;
+            player.position.z += moveZ * speed * delta;
+
+            const angle = Math.atan2(moveX, moveZ);
+            let rotDiff = angle - player.rotation.y;
+            while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+            while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+            player.rotation.y += rotDiff * 10 * delta;
+
+            player.position.y = Math.abs(Math.sin(clock.elapsedTime * 10)) * 0.1;
+
+            const dist = Math.sqrt(player.position.x**2 + player.position.z**2);
+            if (dist > 38) {
+                const ratio = 38 / dist;
+                player.position.x *= ratio;
+                player.position.z *= ratio;
+            }
+        } else {
+            isMoving = false;
+            player.position.y = 0;
+        }
+    }
+
+    function updateCamera() {
+        const offset = new THREE.Vector3(0, 12, 12);
+        const targetPos = player.position.clone().add(offset);
+        camera.position.lerp(targetPos, 0.1);
+        camera.lookAt(player.position);
+    }
+
+    function updateNPCs(delta) {
+        interactables.forEach(obj => {
+            if (obj.userData.type === 'npc') {
+                obj.userData.moveTimer -= delta;
+                if (obj.userData.moveTimer <= 0) {
+                    obj.userData.moveTimer = Math.random() * 3 + 2;
+                    if (Math.random() > 0.5) obj.userData.dir.set(0, 0, 0);
+                    else obj.userData.dir.set(Math.random()-0.5, 0, Math.random()-0.5).normalize();
+                }
+
+                if (obj.userData.dir.lengthSq() > 0) {
+                    obj.position.addScaledVector(obj.userData.dir, 1.5 * delta);
+                    obj.rotation.y = Math.atan2(obj.userData.dir.x, obj.userData.dir.z);
+                    obj.children[0].position.y = 0.6 + Math.abs(Math.sin(clock.elapsedTime * 8)) * 0.05;
+                    if (obj.position.length() > 30) obj.userData.dir.negate();
+                }
+            }
+        });
+    }
+
+    function setupMobileControls() {
+        const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (isTouch) {
+            document.getElementById('joystick-zone').style.display = 'block';
+            document.getElementById('action-btn').style.display = 'flex';
+            document.getElementById('controls-hint').style.display = 'none';
+        }
+
+        const joystickZone = document.getElementById('joystick-zone');
+        const knob = document.getElementById('joystick-knob');
+        let startX, startY;
+        const maxDist = 35;
+
+        joystickZone.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const rect = joystickZone.getBoundingClientRect();
+            startX = rect.left + rect.width / 2;
+            startY = rect.top + rect.height / 2;
+            joystickActive = true;
+        }, {passive: false});
+
+        joystickZone.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!joystickActive) return;
+            const touch = e.targetTouches[0];
+            let dx = touch.clientX - startX;
+            let dy = touch.clientY - startY;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > maxDist) {
+                const ratio = maxDist / dist;
+                dx *= ratio;
+                dy *= ratio;
+            }
+            knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+            joystickData.x = dx / maxDist;
+            joystickData.y = dy / maxDist;
+        }, {passive: false});
+
+        const endJoystick = (e) => {
+            e.preventDefault();
+            joystickActive = false;
+            joystickData.x = 0;
+            joystickData.y = 0;
+            knob.style.transform = `translate(-50%, -50%)`;
+        };
+        joystickZone.addEventListener('touchend', endJoystick);
+        joystickZone.addEventListener('touchcancel', endJoystick);
+
+        const actionBtn = document.getElementById('action-btn');
+        actionBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            actionBtn.style.transform = 'scale(0.9)';
+            if (dialogueActive) closeDialogue();
+            else checkInteraction();
+        });
+        actionBtn.addEventListener('touchend', () => actionBtn.style.transform = 'scale(1)');
+    }
+
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // 문서 로드 완료 후 실행
+    window.onload = init;
+
+</script>
+</body>
+</html>
